@@ -1,0 +1,154 @@
+# glossary/terms.yaml
+# Layer 1 stand-in: what Alderglen's business users said about six terms, in their own words.
+# This is the mapping step's input. It holds meaning only: no table or column names, no mappings,
+# no hints about which data is misleading. See ADR-011.
+#
+# Source: the Alderglen synthetic interviews in the Requirements Accelerator repo
+# (docs/synthetic-dataset.md). Definitions, exclusions, synonyms and system mentions are quoted
+# from those interviews. The "questions" are composed from each interview's stated measure and
+# breakdowns, phrased as the requester would ask them; they are the questions Cortex Analyst is
+# tested against in layer 3.
+
+terms:
+
+  - id: T1
+    term: active customer
+    owner: Digital Marketing
+    said_by: Digital Marketing Manager
+    definition: >
+      Someone counts as active if they've placed an order on any channel, online or in a store,
+      in the last 90 days.
+    excludes: [internal accounts]
+    synonyms: [recent customer]
+    counted_per: one customer
+    broken_down_by: [channel, time]
+    systems_mentioned: >
+      The email marketing platform, that's the only place I look. Whenever someone places an
+      order online or in a store, it syncs into the platform overnight.
+    why_it_matters: >
+      Every time we plan a win-back campaign, I end up asking someone in the data team to manually
+      pull a customer list, and by the time I get it back the campaign window's half gone.
+    questions:
+      - How many active customers do we have?
+      - How many active customers do we have by channel?
+      - How many customers have not ordered in the last 90 days?
+
+  - id: T2
+    term: active customer
+    owner: FP&A
+    said_by: FP&A Analyst
+    definition: >
+      A customer is active if they hold an open subscription or a positive store-credit balance
+      right now, regardless of when they last actually bought something.
+    excludes: [internal accounts]
+    synonyms: [current active customer]
+    counted_per: one customer
+    broken_down_by: [time]
+    systems_mentioned: >
+      The billing system for subscriptions, and the store-credit ledger in the ERP. The ERP's
+      store-credit ledger, since that's what finance ultimately signs off against. Subscription
+      status updates in real time, store credit balances post overnight.
+    why_it_matters: >
+      The number I report to the board every month never matches what marketing says, and I spend
+      two days each close reconciling the two before anyone will sign off on it.
+    questions:
+      - How many active customers do we have for the board pack?
+      - How many customers have a positive store-credit balance?
+      - How many customers hold an open subscription?
+
+  - id: T3
+    term: engaged member
+    owner: Loyalty (Basecamp Rewards)
+    said_by: Loyalty Programme Manager
+    definition: >
+      A member counts as engaged if they've redeemed points or opened a program email in the last
+      60 days, not just if their card is technically still active.
+    excludes: []
+    synonyms: [active member]
+    synonym_note: >
+      Some people on the team just say 'active member', which honestly probably needs sorting out
+      against whatever marketing means by 'active customer'.
+    counted_per: one member
+    broken_down_by: [time]
+    systems_mentioned: >
+      The loyalty platform, that tracks points, redemptions and email opens all in one place.
+      Points and redemptions post in real time, email engagement syncs in overnight.
+    why_it_matters: >
+      Basecamp Rewards signups keep climbing, but I can't tell how many members are actually still
+      engaging with the program versus just sitting on a card they signed up for once and forgot
+      about.
+    questions:
+      - How many engaged members do we have?
+      - What share of all members are engaged?
+      - How many engaged members are there by month over the last year?
+
+  - id: T4
+    term: on-time delivery
+    owner: Customer Experience
+    said_by: Customer Experience Lead
+    definition: >
+      A delivery counts as on-time if it arrives by the date we promised the customer at checkout,
+      not the date the carrier says they shipped it.
+    excludes: [cancellations]
+    synonyms: [late delivery (the failure case)]
+    counted_per: one order
+    broken_down_by: [time, product]
+    systems_mentioned: >
+      The contact centre case system, and separately the order management system for the original
+      promised date. The order management system, since that's what actually told the customer a
+      date in the first place.
+    why_it_matters: >
+      Customers call in furious about a return, and half the time the actual issue is the order
+      never showed up when we told them it would.
+    questions:
+      - What percentage of orders were delivered on time last month?
+      - How many late deliveries did we have by carrier?
+      - What is our on-time delivery rate by month?
+
+  - id: T5
+    term: on-time delivery
+    owner: Supply Chain
+    said_by: Supply Chain Analyst
+    definition: >
+      On-time, for a vendor, means they shipped by the cutoff we agreed in the PO, regardless of
+      when the carrier actually gets it to the DC afterwards, that's on the carrier, not the vendor.
+    excludes: []
+    synonyms: [vendor OTIF]
+    counted_per: one purchase order
+    broken_down_by: [vendor, product, team]
+    systems_mentioned: >
+      The ERP for purchase orders, and the vendor portal for their own shipment confirmations. The
+      ERP, since that's what we hold the vendor to contractually.
+    why_it_matters: >
+      Vendor lead times have crept up over the last two quarters, but I only find out a vendor's
+      slipping once we're already short on shelf.
+    questions:
+      - What is each vendor's on-time delivery rate?
+      - Which vendors are most often late?
+      - How has vendor on-time delivery trended by quarter?
+
+  - id: T6
+    term: stockout
+    owner: Store Operations
+    said_by: Store Operations Manager
+    definition: >
+      A SKU counts as a stockout risk once the stockroom count drops below what we'd sell before
+      the next scheduled delivery, not simply hitting zero.
+    also_said: >
+      Supply Chain Analyst: A stockout, from our side, is when the DC itself runs out before the
+      next inbound PO lands, which usually cascades into individual stores running out too.
+    excludes: []
+    synonyms: [stock risk, run-out]
+    counted_per: one SKU at one store on one day
+    broken_down_by: [store, product]
+    systems_mentioned: >
+      The point-of-sale system for what's sold, and the warehouse management system for what's
+      actually left in the stockroom. The stockroom count updates overnight after the evening
+      cycle count.
+    why_it_matters: >
+      Our best-selling packs and boots sell out at individual stores mid-week, but nobody notices
+      until a customer walks out empty-handed.
+    questions:
+      - Which SKUs at which stores are about to run out?
+      - How many SKUs are at stockout risk by store?
+      - Which products are most often at stockout risk?

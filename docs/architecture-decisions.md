@@ -186,3 +186,23 @@ comes from BI service accounts or spreadsheet extracts, or barely exists.
 
 **Why.** A tool that only works where analysts already write good SQL is least useful where it is
 most needed. Measuring the gap, rather than asserting it, keeps the claim defensible.
+
+## ADR-011: A hand-written glossary stands in for layer 1 (3 October 2026)
+
+**Decision.** `glossary/terms.yaml` holds the six terms as business users stated them: definition,
+exclusions, synonyms, the unit counted, breakdowns, the systems they mentioned, why it matters, and
+the questions they ask. It is the mapping step's only input about meaning.
+
+**What it deliberately leaves out.** No table or column names, no mappings, no traps, no open
+questions, and no note that two pairs of terms conflict. Those are things the tool has to work out,
+or ask about, so including them would score the tool on information a real business user would
+never give it.
+
+**Sourcing.** Definitions, exclusions, synonyms and system mentions are quoted from the Requirements
+Accelerator's synthetic interviews. The questions are composed from each interview's stated
+measure and breakdowns; they are the test set for layer 3, where Cortex Analyst is asked them
+against the generated semantic view.
+
+**Realistic gaps kept on purpose.** Marketing names only the email platform, which is not in the
+estate; Loyalty's "engaged member" and Marketing's "active customer" overlap with no shared words.
+A real interview produces exactly this kind of incomplete, uneven input.

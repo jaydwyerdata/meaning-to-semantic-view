@@ -44,6 +44,8 @@ Early build. What exists today:
 - **Verified in Snowflake**: the estate has been built and loaded on a Snowflake trial account
   (19 tables, 1,094,354 rows, no failed statements) and every designed trap holds in the real
   data. Results are in [ADR-008](docs/architecture-decisions.md#adr-008-estate-verified-in-snowflake-3-october-2026).
+- **Glossary**: the six business terms as business users stated them, with no schema, in
+  [glossary/terms.yaml](glossary/terms.yaml). Stands in for the layer 1 interview until it is built.
 - **Simulated query history**: 34 analyst queries, right and wrong in realistic proportion, so
   the mapping step has usage evidence to weigh. Run in Snowflake: all 34 succeeded. See
   [ADR-009](docs/architecture-decisions.md#adr-009-simulated-analyst-query-history-3-october-2026).
@@ -80,6 +82,7 @@ python tests/emulator_smoke.py
 
 ```
 sql/      estate DDL, data load and simulated analyst workload
+glossary/ business terms in business language (the mapping step's input)
 eval/     answer key, reference queries and workload notes (never read by the tool)
 tests/    offline emulator smoke test
 docs/     design documents

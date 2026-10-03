@@ -8,6 +8,8 @@
   from "verified in Snowflake". Unverified numbers stay flagged.
 - Never hard-code Snowflake account, organisation or user identifiers. Object names are variables.
 - No real employer data, schemas, names or documents. Alderglen Outfitters is fictional.
+- glossary/terms.yaml is the mapping step's only input about meaning. Keep it in business language:
+  no table or column names, mappings, traps or conflict notes.
 - Evaluation isolation: the mapping step may read catalog metadata, sample values and query history
   only. It must never read eval/, docs/legacy-estate.md or the comments in sql/02_load_data.sql.
   When reading query history it uses SELECT statements only and excludes queries tagged SVC_BUILD
