@@ -52,30 +52,43 @@ Early build. What exists today:
 - **Offline smoke test**: runs the full build against a local Snowflake emulator, checks every
   designed trap exists in the data and runs every workload query. Passing.
 
-Not yet built: all three layers above.
+- **Mapping step, first cut (layer 2)**: Python stored procedures that profile the estate and ask
+  Cortex to map one term at a time, with evidence, under a role that cannot see the answer key.
+  Unit tested offline; not yet run in Snowflake. See
+  [ADR-012](docs/architecture-decisions.md#adr-012-the-mapper-runs-inside-snowflake-under-its-own-isolated-role-3-october-2026).
+
+Not yet built: the business user interview (layer 1), engineer review, and semantic view
+generation and validation (layer 3).
 
 ## Running it
 
-**In Snowflake.** Run as a role that can create databases and warehouses (SYSADMIN on a trial
-account). No account or organisation identifiers are hard-coded; object names are session
-variables at the top of each script.
+**In Snowflake.** Scripts 01 to 03 run as a role that can create databases and warehouses
+(SYSADMIN on a trial account); 04 runs as ACCOUNTADMIN; 05 to 07 switch to `SVC_MAPPER` themselves.
+No account or organisation identifiers are hard-coded; object names are session variables at the
+top of each script.
 
-The estate scripts need no Cortex access. The mapping step (not yet built) will: the Claude models it
-defaults to are served cross-region only, so an ACCOUNTADMIN must set
-`CORTEX_ENABLED_CROSS_REGION` (for example to `'ANY_REGION'`) if the account has not already.
+The mapping step needs Cortex. The Claude models it defaults to are served cross-region only, so an
+ACCOUNTADMIN must set `CORTEX_ENABLED_CROSS_REGION` (for example to `'ANY_REGION'`) if the account
+has not already.
 
 ```
 sql/01_setup_and_ddl.sql      creates warehouse, database, schemas, tables
 sql/02_load_data.sql          loads deterministic synthetic data (a few minutes on XSMALL)
 sql/03_analyst_workload.sql   simulated analyst query history for the mapping step to learn from
+sql/04_app_setup.sql          tool database and isolated roles (run as ACCOUNTADMIN)
+sql/05_glossary.sql           loads the glossary (generated)
+sql/06_procedures.sql         mapping step procedures (generated)
+sql/07_run_slice1.sql         profiles the estate and maps one term, with and without history
 eval/reference_queries.sql    ground-truth answers for each business term
 ```
 
 **Offline.**
 
 ```
-pip install fakesnow sqlglot
+pip install fakesnow sqlglot pyyaml
 python tests/emulator_smoke.py
+python -m unittest discover -s tests
+python tools/build_sql.py      regenerates 05 and 06 after editing glossary/ or python/
 ```
 
 ## Repo layout
@@ -83,8 +96,10 @@ python tests/emulator_smoke.py
 ```
 sql/      estate DDL, data load and simulated analyst workload
 glossary/ business terms in business language (the mapping step's input)
+python/   stored procedure source (inlined into sql/06 by tools/build_sql.py)
+tools/    build script for the generated SQL
 eval/     answer key, reference queries and workload notes (never read by the tool)
-tests/    offline emulator smoke test
+tests/    offline emulator smoke test and procedure unit tests
 docs/     design documents
 ```
 

@@ -1,0 +1,271 @@
+"""MAP_TERM: proposes how one glossary term maps onto the estate, from catalog metadata, column
+profiles and (optionally) query history, using AI_COMPLETE with structured output. Writes one
+row per run to MAPPER.PROPOSALS. See ADR-012."""
+import json
+import re
+import uuid
+
+EXCLUDED_TAGS = ("SVC_BUILD", "SVC_EVAL")           # ADR-007
+EXCLUDED_ROLES = ("SVC_MAPPER", "SVC_EVALUATOR")    # the tool's own queries are not evidence
+HISTORY_DAYS = 90
+HISTORY_LIMIT = 200
+QUERY_CHARS = 2000
+WRITE_WORDS = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|GRANT|REVOKE|CALL|COPY|PUT|TRUNCATE|EXECUTE|USE)\b",
+    re.IGNORECASE,
+)
+
+EVIDENCE = {
+    "type": "array",
+    "description": "What supports this choice. Cite the specific profile figures or query.",
+    "items": {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": ["glossary", "metadata", "sample_values", "query_history"]},
+            "detail": {"type": "string"},
+        },
+        "required": ["kind", "detail"],
+        "additionalProperties": False,
+    },
+}
+
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "entity": {
+            "type": "object",
+            "description": "The table whose rows are the thing being counted.",
+            "properties": {
+                "table": {"type": "string", "description": "SCHEMA.TABLE"},
+                "key_columns": {"type": "array", "items": {"type": "string"}},
+                "counted_per": {"type": "string", "description": "Plain language, e.g. one member"},
+                "evidence": EVIDENCE,
+            },
+            "required": ["table", "key_columns", "counted_per", "evidence"],
+            "additionalProperties": False,
+        },
+        "components": {
+            "type": "array",
+            "description": "Every table, column, join, filter and time window the definition needs.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "role": {"type": "string", "enum": ["source", "join", "filter", "time_window", "exclusion"]},
+                    "meaning": {"type": "string", "description": "Which part of the business definition this serves"},
+                    "expression": {"type": "string", "description": "SQL fragment using SCHEMA.TABLE.COLUMN names"},
+                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "evidence": EVIDENCE,
+                },
+                "required": ["role", "meaning", "expression", "confidence", "evidence"],
+                "additionalProperties": False,
+            },
+        },
+        "rejected": {
+            "type": "array",
+            "description": "Columns that look relevant but should not be used, and why.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": "SCHEMA.TABLE.COLUMN"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["column", "reason"],
+                "additionalProperties": False,
+            },
+        },
+        "measure_sql": {
+            "type": "string",
+            "description": "One read-only SELECT returning a single number: the count for this term as of today. "
+                           "Fully qualified SCHEMA.TABLE names, no database prefix, no semicolon.",
+        },
+        "questions_for_business": {
+            "type": "array",
+            "description": "Ambiguities only the business owner can settle, in plain language, no schema terms.",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["entity", "components", "rejected", "measure_sql", "questions_for_business"],
+    "additionalProperties": False,
+}
+
+INSTRUCTIONS = """You map a business term onto a legacy data estate so an engineer can build a semantic view.
+
+You are given: the business owner's own description of the term (no schema), the estate's catalog with
+column profiles (row counts, distinct values, most common values, value ranges, and for dates how many
+days ago the latest value is), and possibly query history from the company's analysts.
+
+Rules:
+- Use only tables and columns that appear in the catalog. Never invent names.
+- The estate has cryptic names, no comments and no declared keys. Infer meaning from values, not names alone.
+- Key formats may differ between systems. Check the profiles before proposing a join.
+- A date column whose latest value is long ago may be stale. Do not rely on stale columns for recency.
+- Query history shows how analysts query the data. Analysts make mistakes; weigh history against the
+  profiles and the business definition, and do not treat frequency as correctness.
+- Status or flag columns often look like the answer and are not. Check them against the business wording.
+- Every component cites its evidence. Prefer asking the business owner over guessing: put genuine
+  ambiguities in questions_for_business, in plain language.
+- measure_sql must follow the business definition exactly as stated, using today's date for any window."""
+
+
+def schema_literal(schema: dict) -> str:
+    """AI_COMPLETE takes response_format as a SQL object constant, not a string."""
+    text = json.dumps(schema)
+    if "'" in text:
+        raise ValueError("Schema text must not contain single quotes")
+    return text.replace('"', "'")
+
+
+def format_catalog(profile_rows: list) -> str:
+    """profile_rows: dicts with COLUMN_PROFILE fields, ordered by schema, table, ordinal."""
+    out, current = [], None
+    for r in profile_rows:
+        table = f"{r['TABLE_SCHEMA']}.{r['TABLE_NAME']}"
+        if table != current:
+            out.append(f"\n{table} ({r['ROW_COUNT']} rows)")
+            current = table
+        rows = r["ROW_COUNT"] or 0
+        null_pct = 0 if not rows else round(100 * (rows - (r["NON_NULL"] or 0)) / rows)
+        line = f"  {r['COLUMN_NAME']} {r['DATA_TYPE']} | distinct~{r['DISTINCT_APPROX']} | nulls {null_pct}%"
+        line += f" | range {r['MIN_VALUE']} .. {r['MAX_VALUE']}"
+        if r.get("DAYS_SINCE_MAX") is not None:
+            line += f" | latest value {r['DAYS_SINCE_MAX']} days ago"
+        top = r.get("TOP_VALUES")
+        if isinstance(top, str):
+            top = json.loads(top) if top else None
+        if top and (r["DISTINCT_APPROX"] or 0) <= 50:
+            parts = [f"{v[0]} ({round(100 * v[1] / rows)}%)" for v in top if rows]
+            line += " | top: " + ", ".join(parts)
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def format_history(rows: list) -> str:
+    if not rows:
+        return ""
+    out = [f"{len(rows)} distinct analyst queries (most frequent first):"]
+    for r in rows:
+        text = r["QUERY_TEXT"][:QUERY_CHARS]
+        out.append(f"\n-- run {r['RUNS']} time(s) by {r['USERS']} user(s)\n{text}")
+    return "\n".join(out)
+
+
+def build_prompt(term: dict, catalog: str, history: str) -> str:
+    term = {k: v for k, v in term.items() if k != "id"}
+    sections = [
+        INSTRUCTIONS,
+        "BUSINESS TERM (the owner's own words):\n" + json.dumps(term, indent=2),
+        "CATALOG AND COLUMN PROFILES:\n" + catalog,
+        ("QUERY HISTORY:\n" + history) if history else "QUERY HISTORY: not provided for this run.",
+    ]
+    return "\n\n".join(sections)
+
+
+def extract_structured(response) -> dict:
+    """AI_COMPLETE with show_details returns structured_output alongside usage; be tolerant of shape."""
+    if isinstance(response, str):
+        response = json.loads(response)
+    out = response.get("structured_output", response)
+    if isinstance(out, list):
+        out = out[0] if out else {}
+    if isinstance(out, dict) and "raw_message" in out:
+        out = out["raw_message"]
+    if isinstance(out, str):
+        out = json.loads(out)
+    return out
+
+
+def safe_select(sql: str) -> str:
+    """Only a single read-only SELECT may run. The mapper role owns its schema, so be strict."""
+    s = (sql or "").strip().rstrip(";").strip()
+    if not s or ";" in s or not re.match(r"^(SELECT|WITH)\b", s, re.IGNORECASE) or WRITE_WORDS.search(s):
+        raise ValueError("measure_sql is not a single read-only SELECT")
+    return s
+
+
+def ga_models(rows: list) -> set:
+    """Names from SHOW CORTEX BASE MODELS whose lifecycle_status is GA (ADR-008)."""
+    out = set()
+    for r in rows:
+        d = {k.strip('"').lower(): v for k, v in r.items()}
+        if (d.get("lifecycle_status") or "").upper() == "GA":
+            out.add((d.get("name") or "").upper())
+    return out
+
+
+def main(session, term_id, model, use_history, raw_db):
+    require_mapper_role(session)
+    db = check_ident(raw_db.upper())
+    app_db, app_schema = session.sql("SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()").collect()[0]
+    app = f"{check_ident(app_db)}.{check_ident(app_schema)}"
+    model = (model or "").upper()
+    if not re.match(r"^[A-Z0-9][A-Z0-9.\-]{0,63}$", model):
+        raise ValueError(f"Not a model name: {model!r}")
+
+    model_note = None
+    rows = [r.as_dict() for r in session.sql("SHOW CORTEX BASE MODELS IN SCHEMA SNOWFLAKE.MODELS").collect()]
+    if rows:
+        if model not in ga_models(rows):
+            raise ValueError(f"{model} is not a GA Cortex model for this role (ADR-008)")
+    else:
+        model_note = "SHOW CORTEX BASE MODELS returned nothing for this role; model not checked"
+
+    term_rows = session.sql(f"SELECT TERM FROM {app}.GLOSSARY WHERE TERM_ID = ?", params=[term_id]).collect()
+    if not term_rows:
+        raise ValueError(f"No glossary term {term_id!r}")
+    term = json.loads(term_rows[0][0])
+
+    profile = [r.as_dict() for r in session.sql(
+        f"SELECT * FROM {app}.COLUMN_PROFILE ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL").collect()]
+    if not profile:
+        raise ValueError("COLUMN_PROFILE is empty: CALL PROFILE_ESTATE() first")
+    catalog = format_catalog(profile)
+
+    history_rows = []
+    if use_history:
+        schemas = sorted({p["TABLE_SCHEMA"] for p in profile})
+        likes = ", ".join("'%" + check_ident(s) + ".%'" for s in schemas)
+        history_rows = [r.as_dict() for r in session.sql(
+            "SELECT QUERY_TEXT, COUNT(*) AS RUNS, COUNT(DISTINCT USER_NAME) AS USERS "
+            "FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY "
+            "WHERE QUERY_TYPE = 'SELECT' AND EXECUTION_STATUS = 'SUCCESS' AND DATABASE_NAME = ? "
+            f"AND START_TIME >= DATEADD(day, -{HISTORY_DAYS}, CURRENT_TIMESTAMP()) "
+            f"AND COALESCE(QUERY_TAG, '') NOT IN ({', '.join(repr(t) for t in EXCLUDED_TAGS)}) "
+            f"AND ROLE_NAME NOT IN ({', '.join(repr(r) for r in EXCLUDED_ROLES)}) "
+            "AND QUERY_TEXT NOT ILIKE '%INFORMATION_SCHEMA%' "
+            f"AND QUERY_TEXT ILIKE ANY ({likes}) "
+            f"GROUP BY QUERY_TEXT ORDER BY RUNS DESC LIMIT {HISTORY_LIMIT}",
+            params=[db],
+        ).collect()]
+
+    prompt = build_prompt(term, catalog, format_history(history_rows))
+    response = session.sql(
+        f"SELECT AI_COMPLETE('{model}', ?, {{'temperature': 0, 'max_tokens': 8192}}, "
+        f"{{'type': 'json', 'schema': {schema_literal(RESPONSE_SCHEMA)}}}, TRUE)",
+        params=[prompt],
+    ).collect()[0][0]
+    response = json.loads(response) if isinstance(response, str) else response
+    proposal = extract_structured(response)
+
+    measure_sql, measure_value, measure_error = proposal.get("measure_sql"), None, None
+    try:
+        sql = safe_select(measure_sql)
+        session.sql(f"USE DATABASE {db}").collect()   # measure_sql names SCHEMA.TABLE only
+        value = session.sql(sql).collect()[0][0]
+        measure_value = float(value) if value is not None else None
+    except Exception as e:  # recorded, not raised: a bad measure is a finding, not a crash
+        measure_error = str(e)[:2000]
+    finally:
+        session.sql(f"USE SCHEMA {app}").collect()     # caller's rights: restore the caller's context
+
+    run_id = str(uuid.uuid4())
+    session.sql(
+        f"INSERT INTO {app}.PROPOSALS SELECT ?, CURRENT_TIMESTAMP(), ?, ?, ?, ?, ?, "
+        "PARSE_JSON(?), PARSE_JSON(?), ?, ?, ?, ?",
+        params=[run_id, term_id, model, bool(use_history), len(prompt), len(history_rows),
+                json.dumps(proposal), json.dumps(response.get("usage")), measure_sql, measure_value,
+                measure_error, model_note],
+    ).collect()
+    return {"run_id": run_id, "term_id": term_id, "model": model, "use_history": bool(use_history),
+            "history_queries": len(history_rows), "measure_value": measure_value,
+            "measure_error": measure_error, "components": len(proposal.get("components", [])),
+            "questions_for_business": proposal.get("questions_for_business", [])}

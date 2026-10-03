@@ -17,3 +17,5 @@
 - Business users never see table or column names. Validation with them uses example rows in plain language.
 - Keep scope tight: one working slice beats three started.
 - Demo-prep working files (scripts, slide outlines, diagrams for recordings) live in demo/ and are gitignored.
+- sql/05_glossary.sql and sql/06_procedures.sql are generated: edit glossary/ or python/, run
+  python tools/build_sql.py, then python -m unittest discover -s tests. Never hand-edit the generated files.

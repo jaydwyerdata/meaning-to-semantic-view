@@ -206,3 +206,34 @@ against the generated semantic view.
 **Realistic gaps kept on purpose.** Marketing names only the email platform, which is not in the
 estate; Loyalty's "engaged member" and Marketing's "active customer" overlap with no shared words.
 A real interview produces exactly this kind of incomplete, uneven input.
+
+## ADR-012: The mapper runs inside Snowflake under its own isolated role (3 October 2026)
+
+**Decision.** Layer 2 is two Python stored procedures in `SVC_APP.MAPPER`:
+
+- `PROFILE_ESTATE` scans each estate table once and stores per-column statistics: row and distinct
+  counts, nulls, value range, most common values, and for dates how many days ago the latest value
+  is. That last figure is what exposes a stale column.
+- `MAP_TERM(term, model, use_history)` sends one glossary term, the catalog with profiles and,
+  optionally, analyst query history to `AI_COMPLETE` with a JSON schema. It gets back the entity
+  being counted, every component (source, join, filter, time window, exclusion) with its evidence
+  and confidence, the columns it rejected and why, a measure query, and questions for the business
+  owner. It runs the measure query (single read-only `SELECT` only) and records everything, with
+  token usage, in `PROPOSALS`.
+
+**Isolation is enforced by Snowflake, not by convention.** `04_app_setup.sql` creates `SVC_MAPPER`
+and `SVC_EVALUATOR`. Only the evaluator can see `SVC_APP.EVAL`, where the answer key will live.
+Both procedures run with caller's rights and refuse to start unless the session is `SVC_MAPPER`
+with secondary roles off. Without that check, Snowsight's default of activating all of a user's
+roles as secondary roles would silently hand the mapper the evaluator's access. Query tags
+(ADR-007) remain necessary on top, because account query history shows every role's queries.
+
+**Why in Snowflake.** No credentials leave the account, nothing is hard-coded, and the same
+procedures back the Streamlit in Snowflake review screen later. Python lives in `python/` as plain
+modules; `tools/build_sql.py` inlines them into `sql/06_procedures.sql`, and `tests/test_mapper.py`
+loads exactly that inlined code against a fake session, so what is tested is what is deployed.
+
+**Limits.** The whole catalog goes into one prompt. That fits this estate (19 tables, 105 columns)
+but not a real one; a retrieval step (Cortex Search over column profiles) would narrow candidates
+first. Each proposal is one model call with no self-check, and the measure query is the model's own
+SQL, executed only after a read-only guard.
