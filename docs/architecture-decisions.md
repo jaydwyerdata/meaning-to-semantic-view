@@ -83,3 +83,9 @@ well for the wrong reason, which breaks the evaluation isolation rule in ADR-003
 
 **Limit.** A tag is only a filter the tool has to honour; it is not access control. The scoring
 harness should check that no excluded query was used as evidence.
+
+**Finding, first Snowflake load.** The first build ran from an untagged copy of the scripts, so its
+statements carry no query tag. The mapping step therefore also reads `SELECT` statements only. That
+is the right rule anyway: analyst `SELECT`s are the evidence of how data is used, and every build
+statement is DDL or DML (`INSERT ... SELECT` is recorded as `INSERT`). The tag remains essential for
+the reference queries, which are `SELECT`s.

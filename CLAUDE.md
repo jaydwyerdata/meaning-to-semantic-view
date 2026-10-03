@@ -10,7 +10,8 @@
 - No real employer data, schemas, names or documents. Alderglen Outfitters is fictional.
 - Evaluation isolation: the mapping step may read catalog metadata, sample values and query history
   only. It must never read eval/, docs/legacy-estate.md or the comments in sql/02_load_data.sql.
-  When reading query history it must exclude queries tagged SVC_BUILD or SVC_EVAL (ADR-007).
+  When reading query history it uses SELECT statements only and excludes queries tagged SVC_BUILD
+  or SVC_EVAL (ADR-007).
 - Business users never see table or column names. Validation with them uses example rows in plain language.
 - Keep scope tight: one working slice beats three started.
 - Demo-prep working files (scripts, slide outlines, diagrams for recordings) live in demo/ and are gitignored.
