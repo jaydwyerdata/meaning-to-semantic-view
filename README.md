@@ -1,6 +1,4 @@
-# Semantic View Creator
-
-*Working title.*
+# meaning-to-semantic-view
 
 Turns what business people know about their data into a Snowflake semantic view, without asking
 them to know anything about tables or columns.
