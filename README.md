@@ -41,17 +41,23 @@ Early build. What exists today:
   mapped to their correct physical structure, the traps each must avoid, and the questions only an
   SME can settle, in [eval/answer_key.yaml](eval/answer_key.yaml), with executable versions in
   [eval/reference_queries.sql](eval/reference_queries.sql).
+- **Verified in Snowflake**: the estate has been built and loaded on a Snowflake trial account
+  (19 tables, 1,094,354 rows, no failed statements) and every designed trap holds in the real
+  data. Results are in [ADR-008](docs/architecture-decisions.md#adr-008-estate-verified-in-snowflake-3-october-2026).
 - **Offline smoke test**: runs the full build against a local Snowflake emulator and checks every
   designed trap exists in the data. Passing.
 
-Not yet built: all three layers above. The estate has passed the emulator smoke test but has not
-yet been run in Snowflake itself.
+Not yet built: all three layers above.
 
 ## Running it
 
 **In Snowflake.** Run as a role that can create databases and warehouses (SYSADMIN on a trial
 account). No account or organisation identifiers are hard-coded; object names are session
 variables at the top of each script.
+
+The estate scripts need no Cortex access. The mapping step (not yet built) will: the Claude models it
+defaults to are served cross-region only, so an ACCOUNTADMIN must set
+`CORTEX_ENABLED_CROSS_REGION` (for example to `'ANY_REGION'`) if the account has not already.
 
 ```
 sql/01_setup_and_ddl.sql      creates warehouse, database, schemas, tables

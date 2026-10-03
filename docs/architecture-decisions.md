@@ -89,3 +89,54 @@ statements carry no query tag. The mapping step therefore also reads `SELECT` st
 is the right rule anyway: analyst `SELECT`s are the evidence of how data is used, and every build
 statement is DDL or DML (`INSERT ... SELECT` is recorded as `INSERT`). The tag remains essential for
 the reference queries, which are `SELECT`s.
+
+## ADR-008: Estate verified in Snowflake (3 October 2026)
+
+**Finding.** The estate was built and loaded on a Snowflake trial account (SYSADMIN, XSMALL
+warehouse). All 19 tables loaded, 1,094,354 rows in total, with no failed statements. Reference
+query results for that load:
+
+| Term | Value |
+|---|---|
+| T1 active customer (Marketing) | 2,932 |
+| T2 active customer (Finance) | 1,469 |
+| T3 engaged member | 846 |
+| T4 on-time delivery % (Customer Experience) | 53.2 |
+| T5 on-time delivery % (vendor) | 74.4 |
+| T6 store-SKUs at stockout risk | 842 |
+| T6 decoy: store-SKUs at zero on hand | 3,204 |
+| T6 at risk but not at zero | 103 |
+| T6 at zero but not at risk | 2,465 |
+| Decoy: active per `ERP.CUSMST.LSTPURDT` | 0 |
+| Decoy: `ERP.CUSMST.STSCD = 'A'` | 4,245 |
+| Decoy: `LOY.MBR.CARD_STAT = 'ACT'` | 2,785 |
+
+Values move with the load date (ADR-004); these are a record of one load, not fixed expectations.
+
+**Every designed trap holds.** The two "active customer" definitions disagree by a factor of two.
+The two "on-time delivery" definitions differ by 21 points. Card status overstates engagement more
+than threefold, and ERP account status overstates activity. Both stockout distinguishing cases exist
+(ADR-005). The stale `LSTPURDT` column returns zero recent customers by construction, since its batch
+stopped 180 days before the load: a mapper that profiles freshness catches it, one that trusts
+column names does not.
+
+**Model availability is not stable.** A Cortex smoke test against `mistral-large2` failed because
+the model had moved to legacy state. The mapping step will therefore take its model name as a
+setting, checked at startup against `SHOW CORTEX BASE MODELS IN SCHEMA SNOWFLAKE.MODELS`, never
+hard-coded. The schema qualifier matters: unqualified, the command is scoped to the current database
+and returns no rows once the session has run `USE DATABASE`. The default will be
+chosen on cost: start with a capable mid-tier model and move up only if scoring against the answer
+key shows misses.
+
+**Default model.** From the trial account's `SHOW CORTEX BASE MODELS` on 3 October 2026:
+
+- Default: `CLAUDE-SONNET-5`. Generally available, not legacy, and a mid-tier cost.
+- Cheaper comparison: `CLAUDE-HAIKU-4-5`. If it scores the same against the answer key, it
+  becomes the default.
+- Ceiling: `CLAUDE-OPUS-5`, used only if the default misses mappings.
+- Excluded: preview models (`PUPR`, `PRPR`) and anything `LEGACY` or `EOL`. `CLAUDE-4-SONNET`, for
+  example, was legacy with an end-of-life date of 14 October 2026, eleven days after this check.
+
+The startup check accepts only models whose `lifecycle_status` is `GA`. Every Claude model on the
+list has no in-region availability, so the account needs cross-region inference enabled; the trial
+account already had it, since a test call to `CLAUDE-OPUS-4-5` succeeded.
