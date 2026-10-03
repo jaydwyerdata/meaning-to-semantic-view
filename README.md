@@ -44,8 +44,11 @@ Early build. What exists today:
 - **Verified in Snowflake**: the estate has been built and loaded on a Snowflake trial account
   (19 tables, 1,094,354 rows, no failed statements) and every designed trap holds in the real
   data. Results are in [ADR-008](docs/architecture-decisions.md#adr-008-estate-verified-in-snowflake-3-october-2026).
-- **Offline smoke test**: runs the full build against a local Snowflake emulator and checks every
-  designed trap exists in the data. Passing.
+- **Simulated query history**: 34 analyst queries, right and wrong in realistic proportion, so
+  the mapping step has usage evidence to weigh. Written in, not yet run in Snowflake. See
+  [ADR-009](docs/architecture-decisions.md#adr-009-simulated-analyst-query-history-3-october-2026).
+- **Offline smoke test**: runs the full build against a local Snowflake emulator, checks every
+  designed trap exists in the data and runs every workload query. Passing.
 
 Not yet built: all three layers above.
 
@@ -62,6 +65,7 @@ defaults to are served cross-region only, so an ACCOUNTADMIN must set
 ```
 sql/01_setup_and_ddl.sql      creates warehouse, database, schemas, tables
 sql/02_load_data.sql          loads deterministic synthetic data (a few minutes on XSMALL)
+sql/03_analyst_workload.sql   simulated analyst query history for the mapping step to learn from
 eval/reference_queries.sql    ground-truth answers for each business term
 ```
 
@@ -75,8 +79,8 @@ python tests/emulator_smoke.py
 ## Repo layout
 
 ```
-sql/      estate DDL and data load
-eval/     answer key and reference queries (never read by the tool)
+sql/      estate DDL, data load and simulated analyst workload
+eval/     answer key, reference queries and workload notes (never read by the tool)
 tests/    offline emulator smoke test
 docs/     design documents
 ```

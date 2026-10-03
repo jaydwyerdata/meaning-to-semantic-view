@@ -2,8 +2,9 @@
 Offline smoke test: runs the DDL, the data load and the reference queries against fakesnow,
 a local DuckDB-backed Snowflake emulator, so the SQL can be checked without a Snowflake account.
 
-What this proves: the scripts parse, every insert runs, row counts land where expected, and the
-reference queries return values that show each designed trap actually exists in the data.
+What this proves: the scripts parse, every insert runs, row counts land where expected, the
+reference queries return values that show each designed trap actually exists in the data, and
+every query in the simulated analyst workload runs.
 What it does not prove: Snowflake-specific behaviour. The emulator's HASH is unsigned and differs
 from Snowflake's, so the harness rewrites the hash expressions and exact values will differ from a
 real Snowflake load. The real check is running the scripts in Snowflake itself.
@@ -21,6 +22,7 @@ import sqlglot
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["sql/01_setup_and_ddl.sql", "sql/02_load_data.sql", "eval/reference_queries.sql"]
+WORKLOAD = "sql/03_analyst_workload.sql"
 
 # Minimum row counts per table; a load that silently drops rows fails here.
 EXPECTED_MIN = {
@@ -29,8 +31,8 @@ EXPECTED_MIN = {
 }
 
 
-def emulator_sql() -> list[str]:
-    txt = "\n".join((ROOT / f).read_text() for f in FILES)
+def emulator_sql(files: list[str]) -> list[str]:
+    txt = "\n".join((ROOT / f).read_text() for f in files)
     # Emulator only: signed-hash semantics, and no session variables or IDENTIFIER().
     txt = re.sub(r"MOD\(ABS\(HASH\(([^()]*)\)\), (\$?\w+)\)", r"CAST(MOD(HASH(\1), \2) AS BIGINT)", txt)
     txt = re.sub(r"SET (DB_NAME|WH_NAME|AS_OF) = .*?;\n", "", txt)
@@ -45,9 +47,9 @@ def main() -> int:
     n_mbr = 0
     with fakesnow.patch():
         cur = snowflake.connector.connect(database="ALDERGLEN_RAW", schema="ERP").cursor()
-        for stmt in emulator_sql():
+        for stmt in emulator_sql(FILES):
             upper = stmt.upper()
-            if upper.startswith(("CREATE WAREHOUSE", "USE WAREHOUSE")):
+            if upper.startswith(("CREATE WAREHOUSE", "USE WAREHOUSE", "ALTER SESSION")):
                 continue
             if upper.startswith("SET N_MBR"):
                 cur.execute("SELECT COUNT(*) FROM LOY.MBR")
@@ -57,6 +59,14 @@ def main() -> int:
             if upper.startswith(("SELECT", "WITH")):
                 for name, value in cur.fetchall():
                     results[name] = value
+        # Simulated analyst workload: every query must run; row counts are informational.
+        workload_rows = []
+        for stmt in emulator_sql([WORKLOAD]):
+            if not stmt.upper().startswith(("SELECT", "WITH")):
+                continue
+            cur.execute(stmt)
+            workload_rows.append(len(cur.fetchall()))
+        print(f"Workload: {len(workload_rows)} queries ran, row counts {workload_rows}\n")
 
     failures = []
     for table, minimum in EXPECTED_MIN.items():

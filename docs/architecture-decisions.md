@@ -140,3 +140,27 @@ key shows misses.
 The startup check accepts only models whose `lifecycle_status` is `GA`. Every Claude model on the
 list has no in-region availability, so the account needs cross-region inference enabled; the trial
 account already had it, since a test call to `CLAUDE-OPUS-4-5` succeeded.
+
+## ADR-009: Simulated analyst query history (3 October 2026)
+
+**Decision.** `sql/03_analyst_workload.sql` runs 34 ad hoc and report queries written as six analysts
+(marketing, finance, loyalty, customer experience, supply chain, store operations) would write
+them, tagged `SVC_WORKLOAD`. The mapping step reads them as ordinary query history.
+
+**Why.** Layer 2 treats query history as evidence of how an estate is really used: which joins
+work, which codes mean what. A fresh trial account has none, while a real legacy estate has years
+of it. Without a simulated history, layer 2 would be built and tested against an input it will
+never lack in practice.
+
+**How it stays honest.** The workload was written fresh, not copied from the reference queries. No
+query encodes a full SME definition. Wrong usages (decoy columns, wrong keys, fan-out, sign errors)
+appear at least as often as correct ones, as they do in real history, and three queries use wrong
+join keys and return nothing. Which query is which is recorded only in `eval/workload_design.md`,
+outside anything the tool reads.
+
+**Limits.** Each query runs once, so run frequency carries no signal. Everything runs as one user
+and role. The offline smoke test now executes every workload query; that proves they run, not that
+they are realistic.
+
+**Finding.** Adding the query tags in ADR-007 had broken the offline smoke test: the emulator does
+not support `ALTER SESSION`. The harness now skips those statements.
