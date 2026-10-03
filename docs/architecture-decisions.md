@@ -164,3 +164,22 @@ they are realistic.
 
 **Finding.** Adding the query tags in ADR-007 had broken the offline smoke test: the emulator does
 not support `ALTER SESSION`. The harness now skips those statements.
+
+## ADR-010: Query history is optional evidence, and its value is measured (3 October 2026)
+
+**Context.** Two groups hold the knowledge this tool needs. Business users know what terms mean
+and never write queries; layer 1 captures them in conversation (ADR-001). Analysts and engineers
+know where data lives, and their queries are one source of layer 2 evidence (ADR-009). In the
+low-maturity organisations this tool targets, that second group may be small: much query history
+comes from BI service accounts or spreadsheet extracts, or barely exists.
+
+**Decision.**
+
+1. The mapping step must work from catalog metadata and sample values alone. Query history raises
+   or lowers confidence in a proposal; it is never required to make one. Every proposal states
+   which kinds of evidence it rests on.
+2. The mapper is scored against the answer key twice, with and without the simulated workload.
+   The difference is reported as the measured value of query history.
+
+**Why.** A tool that only works where analysts already write good SQL is least useful where it is
+most needed. Measuring the gap, rather than asserting it, keeps the claim defensible.
