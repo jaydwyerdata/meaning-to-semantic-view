@@ -162,6 +162,9 @@ outside anything the tool reads.
 and role. The offline smoke test now executes every workload query; that proves they run, not that
 they are realistic.
 
+**Verified.** Run on the Snowflake trial account on 3 October 2026: all 34 queries succeeded and
+appear in query history as `SELECT` statements tagged `SVC_WORKLOAD`.
+
 **Finding.** Adding the query tags in ADR-007 had broken the offline smoke test: the emulator does
 not support `ALTER SESSION`. The harness now skips those statements.
 

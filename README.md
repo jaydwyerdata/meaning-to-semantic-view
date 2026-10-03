@@ -45,7 +45,7 @@ Early build. What exists today:
   (19 tables, 1,094,354 rows, no failed statements) and every designed trap holds in the real
   data. Results are in [ADR-008](docs/architecture-decisions.md#adr-008-estate-verified-in-snowflake-3-october-2026).
 - **Simulated query history**: 34 analyst queries, right and wrong in realistic proportion, so
-  the mapping step has usage evidence to weigh. Written in, not yet run in Snowflake. See
+  the mapping step has usage evidence to weigh. Run in Snowflake: all 34 succeeded. See
   [ADR-009](docs/architecture-decisions.md#adr-009-simulated-analyst-query-history-3-october-2026).
 - **Offline smoke test**: runs the full build against a local Snowflake emulator, checks every
   designed trap exists in the data and runs every workload query. Passing.
