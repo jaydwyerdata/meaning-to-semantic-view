@@ -1,0 +1,166 @@
+# eval/answer_key.yaml
+# Ground truth for scoring the meaning-to-structure mapping step. Evaluation only: never passed to
+# the mapping step itself. Definitions are quoted from the Alderglen synthetic interviews in the
+# Requirements Accelerator repo (docs/synthetic-dataset.md). Executable versions of each mapping
+# live in eval/reference_queries.sql.
+
+terms:
+
+  - id: T1
+    term: active customer
+    owner: Digital Marketing
+    definition: >
+      Someone counts as active if they've placed an order on any channel, online or in a store,
+      in the last 90 days. Excludes internal accounts.
+    synonyms: [recent customer]
+    correct_mapping:
+      entity: ERP.CUSMST (one row per customer)
+      sources:
+        - OMS.ORD_HDR.ORD_TS (online, click-and-collect, phone)
+        - POS.TXN_HDR.TXN_DT (in store)
+      joins:
+        - OMS.ORD_HDR.CUST_REF to ERP.CUSMST.CUSNO, after stripping the 'C' prefix and zero padding
+        - POS.TXN_HDR.CUST_NO to ERP.CUSMST.CUSNO
+      filters:
+        - OMS.ORD_HDR.ORD_STAT <> 'CNL'
+        - OMS.ORD_HDR.CUST_REF <> 'GUEST'
+        - POS.TXN_HDR.TXN_TYP = 'S'
+        - ERP.CUSMST.CUSTYP <> 'I'
+    traps:
+      - ERP.CUSMST.STSCD = 'A' is the ERP account status, not customer activity
+      - ERP.CUSMST.LSTPURDT looks like last purchase date but is stale (batch stopped) and POS only
+      - POS returns and voids (TXN_TYP R, V) are not orders
+      - Two different customer key formats across OMS and POS
+    open_questions:
+      - Do employee accounts (CUSTYP = 'E') count as internal?
+      - Does a cancelled order count as having placed an order?
+    conflicts_with: T2
+
+  - id: T2
+    term: active customer
+    owner: FP&A
+    definition: >
+      A customer is active if they hold an open subscription or a positive store-credit balance
+      right now, regardless of when they last actually bought something. Excludes internal accounts.
+    synonyms: [current active customer]
+    correct_mapping:
+      entity: ERP.CUSMST
+      sources:
+        - BIL.SUB (open subscription)
+        - ERP.SCLDGR (store credit balance = SUM(TXNAMT) per CUSNO; no balance column exists)
+      joins:
+        - BIL.SUB.CUSNO to ERP.CUSMST.CUSNO
+        - ERP.SCLDGR.CUSNO to ERP.CUSMST.CUSNO
+      filters:
+        - open subscription, see open questions
+        - SUM(ERP.SCLDGR.TXNAMT) > 0
+        - ERP.CUSMST.CUSTYP <> 'I'
+    traps:
+      - Store credit balance must be aggregated from ledger movements
+      - Purchase recency is explicitly irrelevant to this definition
+    open_questions:
+      - Is a paused subscription (STAT = 'P') open?
+      - Legacy rows with STAT = 'C' and END_DT never populated look open by END_DT alone
+    conflicts_with: T1
+
+  - id: T3
+    term: engaged member
+    owner: Loyalty (Basecamp Rewards)
+    definition: >
+      A member counts as engaged if they've redeemed points or opened a program email in the last
+      60 days, not just if their card is technically still active.
+    synonyms: [active member]
+    correct_mapping:
+      entity: LOY.MBR (one row per member)
+      sources:
+        - LOY.PTS_TXN where TXN_CD = 'RDM'
+        - LOY.EML_EVT where EVT_TYP = 'OPN'
+      joins:
+        - LOY.PTS_TXN.MBR_ID and LOY.EML_EVT.MBR_ID to LOY.MBR.MBR_ID
+        - LOY.MBR.CARD_NO to ERP.CUSMST.LOYNO, only if linking to customers (not MBR_ID)
+    traps:
+      - LOY.MBR.CARD_STAT = 'ACT' is exactly what the SME said engagement is not
+      - EVT_TYP = 'SND' (sent) is not an open; dormant members still receive email
+      - Some members have no ERP customer record, so joining to ERP.CUSMST drops them
+    open_questions:
+      - Does a click (CLK) without a logged open count as opening the email?
+    overlaps_conceptually_with: T1
+
+  - id: T4
+    term: on-time delivery
+    owner: Customer Experience
+    definition: >
+      A delivery counts as on-time if it arrives by the date we promised the customer at checkout,
+      not the date the carrier says they shipped it. Excludes cancellations.
+    synonyms: [late delivery (the failure case)]
+    correct_mapping:
+      grain: one customer order
+      sources:
+        - OMS.ORD_HDR.PRM_DLV_DT (the promise)
+        - OMS.SHPMT.DLV_TS (actual arrival)
+      joins:
+        - OMS.SHPMT.ORD_ID to OMS.ORD_HDR.ORD_ID (one to many: split shipments)
+      logic: MAX(OMS.SHPMT.DLV_TS)::DATE <= OMS.ORD_HDR.PRM_DLV_DT, per order
+      filters:
+        - OMS.ORD_HDR.ORD_STAT <> 'CNL'
+    traps:
+      - OMS.SHPMT.EST_DLV_DT is the carrier estimate, not the promise
+      - OMS.SHPMT.SHP_TS is the date the SME explicitly rejected
+      - Split shipments fan out; judging per shipment overstates on-time
+      - Undelivered parcels (DLV_TS IS NULL) are not yet measurable, not late
+    conflicts_with: T5
+
+  - id: T5
+    term: on-time delivery
+    owner: Supply Chain
+    definition: >
+      On-time, for a vendor, means they shipped by the cutoff we agreed in the PO, regardless of
+      when the carrier actually gets it to the DC afterwards.
+    synonyms: [vendor OTIF]
+    correct_mapping:
+      grain: one purchase order
+      sources:
+        - ERP.POHDR.AGRSHPDT (agreed ship-by cutoff)
+        - ERP.PORCV.ACTSHPDT (actual vendor ship date)
+      joins:
+        - ERP.PORCV.PONUM to ERP.POHDR.PONUM (one to many: backorders)
+      logic: MIN(ERP.PORCV.ACTSHPDT) <= ERP.POHDR.AGRSHPDT, per PO
+      filters:
+        - ERP.POHDR.POSTAT <> 'X'
+    traps:
+      - ERP.PORCV.RCVDT (arrival at DC) is what the SME explicitly excluded
+      - ERP.POHDR.EXPRCVDT is a planner's expected receipt date, not the cutoff
+      - The alias "OTIF" implies an in-full test the definition does not contain
+    open_questions:
+      - Should a backordered second shipment make the PO late?
+    conflicts_with: T4
+
+  - id: T6
+    term: stockout
+    owner: Store Operations (Supply Chain agrees, at DC level)
+    definition: >
+      A SKU counts as a stockout risk once the stockroom count drops below what we'd sell before
+      the next scheduled delivery, not simply hitting zero.
+    synonyms: [stock risk, run-out]
+    correct_mapping:
+      grain: one store and SKU
+      sources:
+        - WMS.INV_SNP.OH_QTY (latest overnight snapshot)
+        - POS.TXN_LN.QTY with POS.TXN_HDR.TXN_TYP = 'S' (sales rate)
+        - WMS.REPL_SCHED.NXT_DLV_DT (next delivery)
+      joins:
+        - POS.TXN_HDR.STR_NO (numeric) to WMS.INV_SNP.LOC_ID ('S' + 3-digit zero padded)
+        - POS.TXN_LN.SKU to WMS.INV_SNP.SKU
+        - WMS.REPL_SCHED.LOC_ID to WMS.INV_SNP.LOC_ID
+      logic: OH_QTY < units sold per day * days until next delivery
+    traps:
+      - OH_QTY = 0 is the definition the SME explicitly rejected
+      - POS return quantities are stored as positive numbers
+      - Store number formats differ between POS and WMS
+    open_questions:
+      - Over what window should the sales rate be measured?
+      - Does stock allocated to click-and-collect (ALLOC_QTY) still count as on hand?
+    notes: >
+      A derived ratio across three tables with a forward-looking date is beyond what a semantic view
+      metric should carry on its own. Expected outcome: the tool recommends a modelled table
+      (store-SKU daily position) and maps the term onto that, rather than forcing it.

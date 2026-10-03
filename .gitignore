@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets and local connection config
+.env
+*.pem
+*.p8
+connections.toml
+config.toml
+
+# Demo-prep working artifacts (speaking scripts, slide outlines, diagrams): never committed
+demo/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
