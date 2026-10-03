@@ -69,3 +69,17 @@ fakesnow (DuckDB-backed) and asserts row counts plus the existence of each desig
 **Limits, stated plainly.** The emulator rewrites the hash expressions (its HASH is unsigned) and
 does not replicate Snowflake exactly, so emulator values differ from a real load. It catches syntax
 and logic errors before trial credits are spent; it does not replace running in Snowflake.
+
+## ADR-007: Build and eval sessions are tagged out of query history (3 October 2026)
+
+**Decision.** `01_setup_and_ddl.sql` and `02_load_data.sql` set `QUERY_TAG = 'SVC_BUILD'`;
+`eval/reference_queries.sql` sets `QUERY_TAG = 'SVC_EVAL'`. The mapping step must exclude both tags
+when it reads query history.
+
+**Why.** Layer 2 uses query history as evidence of how the estate is really used. Running the
+reference queries in the same account would put the answer key into that history, and the load
+script's INSERT statements reveal how every decoy was generated. Either would let the mapper score
+well for the wrong reason, which breaks the evaluation isolation rule in ADR-003.
+
+**Limit.** A tag is only a filter the tool has to honour; it is not access control. The scoring
+harness should check that no excluded query was used as evidence.

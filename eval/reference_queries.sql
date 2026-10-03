@@ -9,6 +9,9 @@
 */
 
 SET DB_NAME = 'ALDERGLEN_RAW';
+
+-- Tag this session so the mapping step can exclude it from query history (ADR-007).
+ALTER SESSION SET QUERY_TAG = 'SVC_EVAL';
 USE DATABASE IDENTIFIER($DB_NAME);
 SET AS_OF = CURRENT_DATE();
 

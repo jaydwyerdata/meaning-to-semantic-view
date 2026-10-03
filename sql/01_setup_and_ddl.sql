@@ -11,6 +11,9 @@
 SET DB_NAME = 'ALDERGLEN_RAW';
 SET WH_NAME = 'SVC_WH';
 
+-- Tag this session so the mapping step can exclude it from query history (ADR-007).
+ALTER SESSION SET QUERY_TAG = 'SVC_BUILD';
+
 CREATE WAREHOUSE IF NOT EXISTS IDENTIFIER($WH_NAME)
   WAREHOUSE_SIZE = 'XSMALL'
   AUTO_SUSPEND = 60
