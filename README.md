@@ -9,12 +9,13 @@ Cortex Analyst and Snowflake Intelligence answer business questions well when a 
 sits underneath them. Writing one needs two kinds of knowledge that rarely live in the same head:
 what the business means ("an active customer ordered in the last 90 days, excluding internal
 accounts") and where that lives physically (which of four date columns, which join, which status
-code). In teams with low governance maturity, the first kind lives with subject matter experts and
-the second with a small, busy data team, and the semantic view never gets written.
+code). In teams still building their governance practice, the first kind lives with subject matter
+experts and the second with the data team, and the semantic view waits until someone joins the two.
 
-I'm the engineer this lands on. Every definition question goes through the same few experts, and
-the answer lives in their heads rather than anywhere I can query. This tool is my attempt to
-capture that knowledge once, in their words, and do the translation work myself with help.
+That gap is the opportunity. Definition questions tend to go to the same few experts, and the
+answers live in conversations rather than anywhere queryable. This tool captures that knowledge
+once, in the experts' own words, and turns it into a governed, reusable asset that engineers map
+and validate, a right-sized step up in governance rather than a programme to stand up first.
 
 ## How it works
 
