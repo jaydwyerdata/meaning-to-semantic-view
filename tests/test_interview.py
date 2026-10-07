@@ -56,7 +56,8 @@ class SchemaWords(unittest.TestCase):
     def test_flags_shapes_and_denylist(self):
         self.assertEqual(iv.find_schema_words("count rows in LOY.MBR"), ["LOY.MBR"])
         self.assertEqual(iv.find_schema_words("where TXN_CD is RDM"), ["TXN_CD"])
-        self.assertEqual(iv.find_schema_words("the card status flag", denylist=["card status"]), ["card status"])
+        self.assertEqual(iv.find_schema_words("filter on CARD_STAT or CUSMST", denylist=["CUSMST"]), ["CUSMST", "CARD_STAT"])
+        self.assertEqual(iv.find_schema_words("the member name", denylist=["NAME"]), [])
 
     def test_plain_business_language_passes(self):
         text = "Someone counts as active if they placed an order in the last 90 days, online or in store."
@@ -99,6 +100,32 @@ class ReadbackAndPromotion(unittest.TestCase):
     def test_promotion_refuses_schema_words(self):
         with self.assertRaises(ValueError):
             iv.to_glossary_term(dict(FULL, definition="TXN_CD = 'RDM' in LOY.PTS_TXN"), "T7")
+
+
+class Helpers(unittest.TestCase):
+    def test_schema_literal(self):
+        self.assertEqual(iv.schema_literal({"a": "b"}), "{'a': 'b'}")
+        with self.assertRaises(ValueError):
+            iv.schema_literal({"a": "it's"})
+
+    def test_parse_structured_shapes(self):
+        self.assertEqual(iv.parse_structured('{"structured_output": [{"raw_message": {"term": "x"}}]}'), {"term": "x"})
+        self.assertEqual(iv.parse_structured({"term": "x"}), {"term": "x"})
+        self.assertIsNone(iv.parse_structured(None))
+        self.assertIsNone(iv.parse_structured(""))
+
+    def test_clean_reply(self):
+        self.assertEqual(iv.clean_reply('  "Who owns it?"  '), "Who owns it?")
+        self.assertEqual(iv.clean_reply('""'), "")
+        self.assertEqual(iv.clean_reply(None), "")
+
+    def test_fallback_takes_the_users_words(self):
+        self.assertEqual(iv.apply_focus_fallback({}, "owner", " Loyalty  team ")["owner"], "Loyalty team")
+        qs = iv.apply_focus_fallback({}, "questions", "How many are there\nWhat share is engaged?")["questions"]
+        self.assertEqual(qs, ["How many are there?", "What share is engaged?"])
+        self.assertEqual(iv.apply_focus_fallback({}, "synonyms", "active member, recent member")["synonyms"],
+                         ["active member", "recent member"])
+        self.assertEqual(iv.apply_focus_fallback({"a": 1}, None, "x"), {"a": 1})
 
 
 if __name__ == "__main__":

@@ -125,11 +125,11 @@ def build_extraction_prompt(turns):
 
 
 def find_schema_words(text, denylist=()):
-    """Identifiers found in text: anything on the engineer's denylist, or shaped like SCHEMA.TABLE or
-    UPPER_SNAKE_CASE. An empty list means the text is safe to show a business user."""
+    """Identifiers found in text: anything on the engineer's denylist (matched case-sensitively, because
+    catalog names are upper case and ordinary words are not), or shaped like SCHEMA.TABLE or UPPER_SNAKE_CASE. An empty list means the text is safe to show a business user."""
     hits = []
     for name in denylist:
-        if name and re.search(rf"\b{re.escape(name)}\b", text, re.IGNORECASE):
+        if name and re.search(rf"\b{re.escape(name)}\b", text):   # case-sensitive: "NAME" is a column, "name" is a word
             hits.append(name)
     for rx in IDENTIFIER_SHAPES:
         hits.extend(m.group(0) for m in rx.finditer(text))
@@ -178,3 +178,64 @@ def to_glossary_term(draft, term_id):
     if leaks:
         raise ValueError(f"Cannot promote: schema-like words in the entry: {', '.join(leaks)}")
     return entry
+
+
+SINGLE_FIELDS = ["term", "owner", "said_by", "definition", "counted_per", "systems_mentioned", "why_it_matters"]
+MAX_ASKS = 2   # after this many asks with no progress on a required field, take the user's words as the answer
+
+
+def schema_literal(schema):
+    """AI_COMPLETE takes response_format as a SQL object constant, not a string."""
+    text = json.dumps(schema)
+    if "'" in text:
+        raise ValueError("Schema text must not contain single quotes")
+    return text.replace('"', "'")
+
+
+def parse_structured(response):
+    """AI_COMPLETE with show_details returns structured_output alongside usage; be tolerant of shape."""
+    if response is None or response == "":
+        return None
+    if isinstance(response, str):
+        response = json.loads(response)
+    out = response.get("structured_output", response) if isinstance(response, dict) else response
+    if isinstance(out, list):
+        out = out[0] if out else {}
+    if isinstance(out, dict) and "raw_message" in out:
+        out = out["raw_message"]
+    if isinstance(out, str):
+        out = json.loads(out)
+    return out if isinstance(out, dict) else None
+
+
+def clean_reply(text):
+    """A model reply as plain text: no wrapping quotes or whitespace. Empty means the call failed."""
+    if text is None:
+        return ""
+    s = str(text).strip()
+    if len(s) >= 2 and s[0] == s[-1] == '"':
+        try:
+            s = json.loads(s)
+        except ValueError:
+            s = s[1:-1]
+    return str(s).strip()
+
+
+def apply_focus_fallback(draft, focus, text):
+    """When extraction fails or makes no progress, take the user's own words as the answer to the field
+    just asked about, so the interview always moves on."""
+    raw = (text or "").strip()
+    if not raw or focus is None:
+        return dict(draft)
+    out = dict(draft)
+    if focus in SINGLE_FIELDS:
+        out[focus] = " ".join(raw.split())
+    elif focus == "questions":
+        parts = [" ".join(p.split()).strip(" -*") for p in re.split(r"[\n?]+", raw)]
+        qs = [p + "?" for p in parts if p]
+        out["questions"] = list(out.get("questions", [])) + qs
+    elif focus in LIST_FIELDS:
+        items = [" ".join(p.split()) for p in re.split(r"[,;\n]+", raw) if p.strip()]
+        if items:
+            out[focus] = items
+    return out

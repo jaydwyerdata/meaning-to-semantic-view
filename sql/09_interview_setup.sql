@@ -1,0 +1,84 @@
+/*
+  09_interview_setup.sql
+  Layer 1 setup (see docs/layer1-slice-plan.md). Creates the interviewer's own role and schema, and the
+  two tables an interview writes to. The interviewer has no access to the estate or to SVC_APP.EVAL.
+  Run once as ACCOUNTADMIN, after 04.
+*/
+
+SET APP_DB = 'SVC_APP';
+SET WH_NAME = 'SVC_WH';
+SET ME = CURRENT_USER();
+
+USE ROLE ACCOUNTADMIN;
+
+CREATE ROLE IF NOT EXISTS SVC_INTERVIEWER;
+GRANT ROLE SVC_INTERVIEWER TO ROLE SYSADMIN;
+GRANT ROLE SVC_INTERVIEWER TO USER IDENTIFIER($ME);
+
+USE DATABASE IDENTIFIER($APP_DB);
+CREATE SCHEMA IF NOT EXISTS INTERVIEW;
+GRANT USAGE ON DATABASE IDENTIFIER($APP_DB) TO ROLE SVC_INTERVIEWER;
+GRANT OWNERSHIP ON SCHEMA INTERVIEW TO ROLE SVC_INTERVIEWER COPY CURRENT GRANTS;
+
+-- Compute and Cortex only. Nothing on the estate database and nothing on EVAL.
+GRANT USAGE ON WAREHOUSE IDENTIFIER($WH_NAME) TO ROLE SVC_INTERVIEWER;
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE SVC_INTERVIEWER;
+
+-- The mapper side promotes confirmed drafts into GLOSSARY, so it reads the drafts (never writes them).
+GRANT USAGE ON SCHEMA INTERVIEW TO ROLE SVC_MAPPER;
+
+USE ROLE SVC_INTERVIEWER;
+USE SECONDARY ROLES NONE;
+USE WAREHOUSE IDENTIFIER($WH_NAME);
+USE SCHEMA SVC_APP.INTERVIEW;
+
+-- The Streamlit app and its files live in this schema, owned by the interviewer.
+CREATE STAGE IF NOT EXISTS APP_STAGE DIRECTORY = (ENABLE = TRUE);
+
+-- One row per interview session. TERM holds the glossary entry in the same shape as terms.yaml.
+-- STATUS: DRAFT while being interviewed, CONFIRMED after the user accepts the read-back,
+-- PROMOTED once copied into the mapper's GLOSSARY.
+CREATE TABLE IF NOT EXISTS TERM_DRAFTS (
+  DRAFT_ID STRING,
+  SESSION_ID STRING,
+  STATUS STRING,
+  TERM VARIANT,
+  CREATED_AT TIMESTAMP_LTZ,
+  UPDATED_AT TIMESTAMP_LTZ,
+  CONFIRMED_AT TIMESTAMP_LTZ,
+  PROMOTED_AT TIMESTAMP_LTZ
+);
+
+-- The full conversation, so a session can resume and an engineer can see exactly what was asked.
+CREATE TABLE IF NOT EXISTS INTERVIEW_TURNS (
+  SESSION_ID STRING,
+  TURN_NO NUMBER,
+  SPEAKER STRING,
+  CONTENT STRING,
+  CREATED_AT TIMESTAMP_LTZ
+);
+
+-- Names the interview must never show or accept: every table and column name in the estate, loaded
+-- by the engineer from the mapper's profile (the interviewer itself cannot see the estate). The app
+-- matches them case-sensitively, so ordinary lower-case words such as "name" are not blocked.
+CREATE TABLE IF NOT EXISTS SCHEMA_DENYLIST (NAME STRING);
+
+USE ROLE ACCOUNTADMIN;
+-- Run after PROFILE_ESTATE (script 07). Safe to re-run.
+DELETE FROM SVC_APP.INTERVIEW.SCHEMA_DENYLIST;
+INSERT INTO SVC_APP.INTERVIEW.SCHEMA_DENYLIST
+  SELECT DISTINCT NAME FROM (
+    SELECT TABLE_NAME AS NAME FROM SVC_APP.MAPPER.COLUMN_PROFILE
+    UNION
+    SELECT COLUMN_NAME AS NAME FROM SVC_APP.MAPPER.COLUMN_PROFILE
+  ) WHERE LENGTH(NAME) >= 4;
+SELECT COUNT(*) AS DENYLIST_NAMES FROM SVC_APP.INTERVIEW.SCHEMA_DENYLIST;
+
+GRANT SELECT ON TABLE SVC_APP.INTERVIEW.TERM_DRAFTS TO ROLE SVC_MAPPER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA SVC_APP.INTERVIEW TO ROLE SVC_MAPPER;
+
+-- Check 1: the interviewer must not see the estate or EVAL. Both of these must FAIL.
+USE ROLE SVC_INTERVIEWER;
+USE SECONDARY ROLES NONE;
+SELECT COUNT(*) FROM ALDERGLEN_RAW.INFORMATION_SCHEMA.TABLES;
+SELECT COUNT(*) FROM SVC_APP.EVAL.INFORMATION_SCHEMA.TABLES;
