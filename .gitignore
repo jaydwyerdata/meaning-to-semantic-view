@@ -13,6 +13,7 @@ config.toml
 
 # Demo-prep working artifacts (speaking scripts, slide outlines, diagrams): never committed
 demo/
+demo-assets/
 
 # OS and editor
 .DS_Store
