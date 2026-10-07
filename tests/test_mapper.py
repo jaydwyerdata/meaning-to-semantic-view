@@ -9,6 +9,7 @@ import json
 import re
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,7 +69,8 @@ PROPOSAL = {
 
 class FakeSession:
     def __init__(self, role="SVC_MAPPER", secondary='{"roles":"","value":""}', models=None,
-                 proposal=PROPOSAL, history=None):
+                 proposal=PROPOSAL, history=None, structured_nulls=0, plain_reply=None):
+        self.structured_nulls, self.plain_reply, self.structured_calls = structured_nulls, plain_reply, 0
         self.role, self.secondary = role, secondary
         self.models = models if models is not None else [
             Row({"name": "CLAUDE-SONNET-5", "lifecycle_status": "GA"}),
@@ -90,8 +92,14 @@ class FakeSession:
             return Result([Row(p) for p in PROFILE])
         if "ACCOUNT_USAGE.QUERY_HISTORY" in q:
             return Result([Row(h) for h in self.history])
+        if q.startswith("SELECT AI_COMPLETE") and "'type': 'json'" not in q:
+            self.prompt = params[0]
+            return Result([Row({"r": self.plain_reply})])
         if q.startswith("SELECT AI_COMPLETE"):
             self.prompt = params[0]
+            self.structured_calls += 1
+            if self.structured_calls <= self.structured_nulls:
+                return Result([Row({"r": None})])
             return Result([Row({"r": json.dumps({"structured_output": [{"raw_message": self.proposal}],
                                                  "usage": {"input_tokens": 10}})})])
         if q.startswith("USE "):
@@ -199,6 +207,40 @@ class MapTermEndToEnd(unittest.TestCase):
         hist_sql, params = next((q, p) for q, p in s.calls if "QUERY_HISTORY" in q)
         self.assertNotIn("AND QUERY_TAG = ?", hist_sql)
         self.assertEqual(params, ["ALDERGLEN_RAW"])
+
+    def test_structured_nulls_then_success_records_retries(self):
+        s = FakeSession(structured_nulls=2)
+        with mock.patch.object(MT["time"], "sleep") as sleeper:
+            out = MT["main"](s, "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
+        self.assertEqual(s.structured_calls, 3)
+        self.assertEqual(sleeper.call_count, 2)
+        self.assertEqual(out["measure_value"], 42.0)
+        self.assertIn("NULL or empty 2 time(s)", s.inserted[-1])
+
+    def test_all_structured_nulls_fall_back_to_a_plain_reply(self):
+        s = FakeSession(structured_nulls=99, plain_reply="```json\n" + json.dumps(PROPOSAL) + "\n```")
+        with mock.patch.object(MT["time"], "sleep"):
+            out = MT["main"](s, "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
+        self.assertEqual(s.structured_calls, MT["MODEL_ATTEMPTS"])
+        self.assertEqual(out["measure_value"], 42.0)
+        self.assertIn("parsed from a plain reply", s.inserted[-1])
+        self.assertIn("conforms to this JSON schema", s.prompt)
+
+    def test_total_failure_reports_what_the_plain_reply_was(self):
+        s = FakeSession(structured_nulls=99, plain_reply="Sorry, I cannot do that.")
+        with mock.patch.object(MT["time"], "sleep"):
+            with self.assertRaises(ValueError) as cm:
+                MT["main"](s, "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
+        self.assertIn("plain-reply fallback returned", str(cm.exception))
+        self.assertIn("Sorry, I cannot do that", str(cm.exception))
+        self.assertIsNone(s.inserted)                         # nothing recorded for a failed run
+
+    def test_parse_json_reply(self):
+        pj = MT["parse_json_reply"]
+        self.assertEqual(pj('Here you go: {"a": 1} done'), {"a": 1})
+        self.assertEqual(pj('```json\n{"a": 1}\n```'), {"a": 1})
+        for bad in [None, "", "no json", "{broken", "[1, 2]"]:
+            self.assertIsNone(pj(bad))
 
     def test_without_history_skips_query_history(self):
         s = FakeSession()

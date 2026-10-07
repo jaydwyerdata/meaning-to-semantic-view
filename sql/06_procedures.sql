@@ -299,6 +299,24 @@ Rules:
 - measure_sql must follow the business definition exactly as stated, using today's date for any window."""
 
 
+def parse_json_reply(text):
+    """A JSON object from a plain model reply: tolerate code fences and surrounding words. None if absent."""
+    if text is None or str(text).strip() == "":
+        return None
+    t = str(text).strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        t = t[4:] if t[:4].lower() == "json" else t
+    start, end = t.find("{"), t.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        out = json.loads(t[start:end + 1])
+    except ValueError:
+        return None
+    return out if isinstance(out, dict) else None
+
+
 def schema_literal(schema: dict) -> str:
     """AI_COMPLETE takes response_format as a SQL object constant, not a string."""
     text = json.dumps(schema)
@@ -454,19 +472,31 @@ def main(session, term_id, model, use_history, raw_db, history_tag):
         if attempt < MODEL_ATTEMPTS:
             time.sleep(RETRY_WAITS[attempt - 1])
     if response is None or response == "":
-        # Diagnose: the same prompt with no response schema, to separate "model or prompt problem"
-        # from "structured output problem". The reply is shown in the error, not stored.
+        # Structured output keeps coming back empty (ADR-013). Last resort: the same prompt as a plain
+        # request that asks for the JSON in the reply, parsed here. The proposal is the same shape and
+        # the run's NOTE says it was parsed from a plain reply, so the comparison stays honest.
+        plain_prompt = (prompt + "\n\nReturn ONLY a JSON object that conforms to this JSON schema. No commentary, "
+                        "no code fences:\n" + json.dumps(RESPONSE_SCHEMA))
         try:
             plain = session.sql(
-                f"SELECT AI_COMPLETE('{model}', ?, {{'temperature': 0, 'max_tokens': 300}})",
-                params=[prompt],
+                f"SELECT AI_COMPLETE('{model}', ?, {{'temperature': 0, 'max_tokens': 8192}})",
+                params=[plain_prompt],
             ).collect()[0][0]
-            diag = f"plain call (no schema) returned: {str(plain)[:400]!r}"
+            proposal = parse_json_reply(plain)
         except Exception as e:
-            diag = f"plain call (no schema) raised: {str(e)[:400]}"
-        raise ValueError(f"AI_COMPLETE returned NULL on all {MODEL_ATTEMPTS} attempts "
-                         f"(prompt {len(prompt)} chars, use_history={bool(use_history)}); {diag}")
-    proposal = extract_structured(response)
+            plain, proposal = None, None
+            plain_error = str(e)[:300]
+        else:
+            plain_error = None
+        if proposal is None:
+            diag = (f"plain-reply fallback raised: {plain_error}" if plain_error
+                    else f"plain-reply fallback returned: {str(plain)[:300]!r}")
+            raise ValueError(f"AI_COMPLETE returned NULL on all {MODEL_ATTEMPTS} attempts "
+                             f"(prompt {len(prompt)} chars, use_history={bool(use_history)}); {diag}")
+        note = f"structured output returned NULL {MODEL_ATTEMPTS} times; proposal parsed from a plain reply"
+        model_note = f"{model_note}; {note}" if model_note else note
+    else:
+        proposal = extract_structured(response)
 
     measure_sql, measure_value, measure_error = proposal.get("measure_sql"), None, None
     try:
@@ -484,7 +514,7 @@ def main(session, term_id, model, use_history, raw_db, history_tag):
         f"INSERT INTO {app}.PROPOSALS SELECT ?, CURRENT_TIMESTAMP(), ?, ?, ?, ?, ?, "
         "PARSE_JSON(?), PARSE_JSON(?), NULLIF(?, ''), TRY_TO_DOUBLE(NULLIF(?, '')), NULLIF(?, ''), NULLIF(?, '')",
         params=[run_id, term_id, model, bool(use_history), len(prompt), len(history_rows),
-                json.dumps(proposal), json.dumps(response.get("usage")), _nz(measure_sql), _nz(measure_value),
+                json.dumps(proposal), json.dumps(response.get("usage") if isinstance(response, dict) else None), _nz(measure_sql), _nz(measure_value),
                 _nz(measure_error), _nz(model_note)],
     ).collect()
     return {"run_id": run_id, "term_id": term_id, "model": model, "use_history": bool(use_history),
