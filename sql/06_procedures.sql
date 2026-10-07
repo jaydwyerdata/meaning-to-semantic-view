@@ -59,6 +59,11 @@ def require_mapper_role(session) -> None:
         )
 
 
+def _nz(v):
+    """Snowpark binds Python None as the text 'None', so send an empty string and NULLIF it in SQL."""
+    return "" if v is None else str(v)
+
+
 """PROFILE_ESTATE: one pass over every estate table, storing per-column statistics the mapper
 uses as evidence (catalog metadata and sample values, ADR-010). Writes MAPPER.COLUMN_PROFILE."""
 import json
@@ -119,10 +124,11 @@ def main(session, raw_db):
             base = 1 + i * 6
             non_null, distinct, mn, mx, top, age = stats[base:base + 6]
             session.sql(
-                f"INSERT INTO {PROFILE_TABLE} SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, PARSE_JSON(?), "
+                f"INSERT INTO {PROFILE_TABLE} SELECT ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), "
+                "TRY_TO_NUMBER(NULLIF(?, '')), PARSE_JSON(?), "
                 "CURRENT_TIMESTAMP()",
                 params=[s, t, r[2], i + 1, type_label(r[3], r[4], r[5], r[6]), row_count, non_null,
-                        distinct, mn, mx, age, top if isinstance(top, str) else json.dumps(top)],
+                        distinct, _nz(mn), _nz(mx), _nz(age), top if isinstance(top, str) else json.dumps(top)],
             ).collect()
             n += 1
     return {"tables": len(tables), "columns": n}
@@ -171,6 +177,11 @@ def require_mapper_role(session) -> None:
             f"Run as {MAPPER_ROLE} with secondary roles off: "
             f"USE ROLE {MAPPER_ROLE}; USE SECONDARY ROLES NONE;  (current: {role}, {secondary})"
         )
+
+
+def _nz(v):
+    """Snowpark binds Python None as the text 'None', so send an empty string and NULLIF it in SQL."""
+    return "" if v is None else str(v)
 
 
 """MAP_TERM: proposes how one glossary term maps onto the estate, from catalog metadata, column
@@ -435,10 +446,10 @@ def main(session, term_id, model, use_history, raw_db):
     run_id = str(uuid.uuid4())
     session.sql(
         f"INSERT INTO {app}.PROPOSALS SELECT ?, CURRENT_TIMESTAMP(), ?, ?, ?, ?, ?, "
-        "PARSE_JSON(?), PARSE_JSON(?), ?, ?, ?, ?",
+        "PARSE_JSON(?), PARSE_JSON(?), NULLIF(?, ''), TRY_TO_DOUBLE(NULLIF(?, '')), NULLIF(?, ''), NULLIF(?, '')",
         params=[run_id, term_id, model, bool(use_history), len(prompt), len(history_rows),
-                json.dumps(proposal), json.dumps(response.get("usage")), measure_sql, measure_value,
-                measure_error, model_note],
+                json.dumps(proposal), json.dumps(response.get("usage")), _nz(measure_sql), _nz(measure_value),
+                _nz(measure_error), _nz(model_note)],
     ).collect()
     return {"run_id": run_id, "term_id": term_id, "model": model, "use_history": bool(use_history),
             "history_queries": len(history_rows), "measure_value": measure_value,

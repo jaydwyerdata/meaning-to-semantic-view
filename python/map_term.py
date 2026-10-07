@@ -260,10 +260,10 @@ def main(session, term_id, model, use_history, raw_db):
     run_id = str(uuid.uuid4())
     session.sql(
         f"INSERT INTO {app}.PROPOSALS SELECT ?, CURRENT_TIMESTAMP(), ?, ?, ?, ?, ?, "
-        "PARSE_JSON(?), PARSE_JSON(?), ?, ?, ?, ?",
+        "PARSE_JSON(?), PARSE_JSON(?), NULLIF(?, ''), TRY_TO_DOUBLE(NULLIF(?, '')), NULLIF(?, ''), NULLIF(?, '')",
         params=[run_id, term_id, model, bool(use_history), len(prompt), len(history_rows),
-                json.dumps(proposal), json.dumps(response.get("usage")), measure_sql, measure_value,
-                measure_error, model_note],
+                json.dumps(proposal), json.dumps(response.get("usage")), _nz(measure_sql), _nz(measure_value),
+                _nz(measure_error), _nz(model_note)],
     ).collect()
     return {"run_id": run_id, "term_id": term_id, "model": model, "use_history": bool(use_history),
             "history_queries": len(history_rows), "measure_value": measure_value,

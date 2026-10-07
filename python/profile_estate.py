@@ -58,10 +58,11 @@ def main(session, raw_db):
             base = 1 + i * 6
             non_null, distinct, mn, mx, top, age = stats[base:base + 6]
             session.sql(
-                f"INSERT INTO {PROFILE_TABLE} SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, PARSE_JSON(?), "
+                f"INSERT INTO {PROFILE_TABLE} SELECT ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), "
+                "TRY_TO_NUMBER(NULLIF(?, '')), PARSE_JSON(?), "
                 "CURRENT_TIMESTAMP()",
                 params=[s, t, r[2], i + 1, type_label(r[3], r[4], r[5], r[6]), row_count, non_null,
-                        distinct, mn, mx, age, top if isinstance(top, str) else json.dumps(top)],
+                        distinct, _nz(mn), _nz(mx), _nz(age), top if isinstance(top, str) else json.dumps(top)],
             ).collect()
             n += 1
     return {"tables": len(tables), "columns": n}

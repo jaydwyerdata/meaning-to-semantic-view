@@ -31,3 +31,8 @@ def require_mapper_role(session) -> None:
             f"Run as {MAPPER_ROLE} with secondary roles off: "
             f"USE ROLE {MAPPER_ROLE}; USE SECONDARY ROLES NONE;  (current: {role}, {secondary})"
         )
+
+
+def _nz(v):
+    """Snowpark binds Python None as the text 'None', so send an empty string and NULLIF it in SQL."""
+    return "" if v is None else str(v)
