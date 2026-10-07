@@ -112,7 +112,7 @@ docs/     design documents
 ## Related
 
 The business terms reuse the synthetic interview dataset from
-[Requirements Accelerator](https://github.com/jaydai2488-lgtm/requirements-accelerator), an
+[Requirements Accelerator](https://github.com/jaydwyerdata/requirements-accelerator), an
 interview tool that turns vague data requests into specs. That tool can emit semantic view DDL but
 deliberately leaves every physical reference as a placeholder, because a requester cannot supply
 schema. This project closes that gap.
