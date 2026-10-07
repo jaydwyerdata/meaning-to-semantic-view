@@ -2,6 +2,7 @@
 profiles and (optionally) query history, using AI_COMPLETE with structured output. Writes one
 row per run to MAPPER.PROPOSALS. See ADR-012."""
 import json
+import time
 import re
 import uuid
 
@@ -9,7 +10,8 @@ EXCLUDED_TAGS = ("SVC_BUILD", "SVC_EVAL")           # ADR-007
 EXCLUDED_ROLES = ("SVC_MAPPER", "SVC_EVALUATOR")    # the tool's own queries are not evidence
 HISTORY_DAYS = 90
 HISTORY_LIMIT = 200
-MODEL_ATTEMPTS = 3          # AI_COMPLETE can return NULL transiently; retry, then fail with a clear message
+MODEL_ATTEMPTS = 5          # AI_COMPLETE intermittently returns NULL or empty (seen on CLAUDE-SONNET-5); retry with backoff
+RETRY_WAITS = (5, 15, 30, 60)  # seconds to wait before attempts 2 to 5
 QUERY_CHARS = 2000
 WRITE_WORDS = re.compile(
     r"\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|GRANT|REVOKE|CALL|COPY|PUT|TRUNCATE|EXECUTE|USE)\b",
@@ -193,7 +195,7 @@ def ga_models(rows: list) -> set:
     return out
 
 
-def main(session, term_id, model, use_history, raw_db):
+def main(session, term_id, model, use_history, raw_db, history_tag):
     require_mapper_role(session)
     db = check_ident(raw_db.upper())
     app_db, app_schema = session.sql("SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()").collect()[0]
@@ -222,6 +224,14 @@ def main(session, term_id, model, use_history, raw_db):
     catalog = format_catalog(profile)
 
     history_rows = []
+    tag_clause, tag_params = "", []
+    if use_history and history_tag:
+        # Optional allow-list: read only history carrying this query tag (for example the simulated
+        # workload). Used so a benchmark cannot be contaminated by stray untagged queries (ADR-013).
+        tag_clause = "AND QUERY_TAG = ? "
+        tag_params = [history_tag]
+        note = f"history restricted to query tag {history_tag}"
+        model_note = f"{model_note}; {note}" if model_note else note
     if use_history:
         schemas = sorted({p["TABLE_SCHEMA"] for p in profile})
         likes = ", ".join("'%" + check_ident(s) + ".%'" for s in schemas)
@@ -233,9 +243,9 @@ def main(session, term_id, model, use_history, raw_db):
             f"AND COALESCE(QUERY_TAG, '') NOT IN ({', '.join(repr(t) for t in EXCLUDED_TAGS)}) "
             f"AND ROLE_NAME NOT IN ({', '.join(repr(r) for r in EXCLUDED_ROLES)}) "
             "AND QUERY_TEXT NOT ILIKE '%INFORMATION_SCHEMA%' "
-            f"AND QUERY_TEXT ILIKE ANY ({likes}) "
+            f"AND QUERY_TEXT ILIKE ANY ({likes}) {tag_clause}"
             f"GROUP BY QUERY_TEXT ORDER BY RUNS DESC LIMIT {HISTORY_LIMIT}",
-            params=[db],
+            params=[db] + tag_params,
         ).collect()]
 
     prompt = build_prompt(term, catalog, format_history(history_rows))
@@ -247,12 +257,14 @@ def main(session, term_id, model, use_history, raw_db):
             params=[prompt],
         ).collect()[0][0]
         response = json.loads(response) if isinstance(response, str) else response
-        if response is not None:
+        if response is not None and response != "":
             if attempt > 1:
-                retry_note = f"AI_COMPLETE returned NULL {attempt - 1} time(s) before this answer"
+                retry_note = f"AI_COMPLETE returned NULL or empty {attempt - 1} time(s) before this answer"
                 model_note = f"{model_note}; {retry_note}" if model_note else retry_note
             break
-    if response is None:
+        if attempt < MODEL_ATTEMPTS:
+            time.sleep(RETRY_WAITS[attempt - 1])
+    if response is None or response == "":
         # Diagnose: the same prompt with no response schema, to separate "model or prompt problem"
         # from "structured output problem". The reply is shown in the error, not stored.
         try:

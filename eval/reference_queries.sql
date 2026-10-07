@@ -11,6 +11,7 @@
 SET DB_NAME = 'ALDERGLEN_RAW';
 
 -- Tag this session so the mapping step can exclude it from query history (ADR-007).
+-- Run this whole file in ONE session. An untagged run leaks the answer key into query history (ADR-013).
 ALTER SESSION SET QUERY_TAG = 'SVC_EVAL';
 USE DATABASE IDENTIFIER($DB_NAME);
 SET AS_OF = CURRENT_DATE();

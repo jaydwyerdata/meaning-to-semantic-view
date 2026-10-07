@@ -25,7 +25,8 @@ PROCEDURES = [
     {
         "module": "map_term.py",
         "signature": "MAP_TERM(TERM_ID STRING, MODEL STRING DEFAULT 'CLAUDE-SONNET-5', "
-                     "USE_HISTORY BOOLEAN DEFAULT TRUE, RAW_DB STRING DEFAULT 'ALDERGLEN_RAW')",
+                     "USE_HISTORY BOOLEAN DEFAULT TRUE, RAW_DB STRING DEFAULT 'ALDERGLEN_RAW', "
+                     "HISTORY_TAG STRING DEFAULT NULL)",
     },
 ]
 
@@ -64,6 +65,10 @@ CREATE TABLE IF NOT EXISTS PROPOSALS (
   MEASURE_SQL STRING, MEASURE_VALUE FLOAT, MEASURE_ERROR STRING, NOTE STRING
 );
 """]
+    out.append("""
+-- Earlier versions had no HISTORY_TAG argument. Drop that signature so a call is never ambiguous.
+DROP PROCEDURE IF EXISTS MAP_TERM(STRING, STRING, BOOLEAN, STRING);
+""")
     for p in PROCEDURES:
         out.append(f"""
 CREATE OR REPLACE PROCEDURE {p['signature']}

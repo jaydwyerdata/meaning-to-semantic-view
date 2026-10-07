@@ -53,10 +53,13 @@ Early build. What exists today:
 - **Offline smoke test**: runs the full build against a local Snowflake emulator, checks every
   designed trap exists in the data and runs every workload query. Passing.
 
-- **Mapping step, first cut (layer 2)**: Python stored procedures that profile the estate and ask
-  Cortex to map one term at a time, with evidence, under a role that cannot see the answer key.
-  Unit tested offline; not yet run in Snowflake. See
-  [ADR-012](docs/architecture-decisions.md#adr-012-the-mapper-runs-inside-snowflake-under-its-own-isolated-role-3-october-2026).
+- **Mapping step (layer 2)**: Python stored procedures that profile the estate and ask Cortex to map
+  one term at a time, with evidence, under a role that cannot see the answer key. Unit tested offline
+  and run in Snowflake for one term (T3, engaged member): the proposals chose the right sources and
+  rejected the card-status trap with and without query history, and their measure queries agreed
+  (not yet checked against the reference query). One term and one model only. See
+  [ADR-012](docs/architecture-decisions.md#adr-012-the-mapper-runs-inside-snowflake-under-its-own-isolated-role-3-october-2026)
+  and [ADR-013](docs/architecture-decisions.md#adr-013-first-snowflake-run-of-the-mapper-and-a-history-leak-caught-7-october-2026).
 
 Not yet built: the business user interview (layer 1), engineer review, and semantic view
 generation and validation (layer 3).
@@ -64,7 +67,7 @@ generation and validation (layer 3).
 ## Running it
 
 **In Snowflake.** Scripts 01 to 03 run as a role that can create databases and warehouses
-(SYSADMIN on a trial account); 04 runs as ACCOUNTADMIN; 05 to 07 switch to `SVC_MAPPER` themselves.
+(SYSADMIN on a trial account); 04 runs as ACCOUNTADMIN; 05 to 07 switch to `SVC_MAPPER` themselves. Run the reference queries only with the `SVC_EVAL` tag set (ADR-013).
 No account or organisation identifiers are hard-coded; object names are session variables at the
 top of each script.
 

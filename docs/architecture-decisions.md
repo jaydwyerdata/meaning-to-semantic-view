@@ -237,3 +237,46 @@ loads exactly that inlined code against a fake session, so what is tested is wha
 but not a real one; a retrieval step (Cortex Search over column profiles) would narrow candidates
 first. Each proposal is one model call with no self-check, and the measure query is the model's own
 SQL, executed only after a read-only guard.
+
+## ADR-013: First Snowflake run of the mapper, and a history leak caught (7 October 2026)
+
+**What ran.** `04` to `07` on the trial account. `PROFILE_ESTATE` returned 19 tables and 105 columns.
+`MAP_TERM` for T3 (engaged member) ran three times on `CLAUDE-SONNET-5`: with history, without, and with
+history restricted to the simulated workload.
+
+**Result.** All three proposals chose `LOY.PTS_TXN` where `TXN_CD = 'RDM'` and `LOY.EML_EVT` where
+`EVT_TYP = 'OPN'`, each in a 60-day window, counted per member, and rejected `LOY.MBR.CARD_STAT` as the
+trap. All three measure queries returned 794. That figure has not yet been checked against
+`eval/reference_queries.sql`, so it shows the three runs agree, not that they are right. The no-history
+run reached the same mapping from catalog metadata and sample values alone (ADR-010, point 1).
+
+**Finding 1: the first with-history run was contaminated.** Its evidence quoted queries labelled
+`T3 engaged member` and `Decoy: LOY CARD_STAT = ACT`, which exist only in `eval/reference_queries.sql`.
+It read 44 history queries against the 34 in the simulated workload. Account query history held nine
+copies of the reference queries tagged `SVC_EVAL` (excluded, as designed) and nine identical untagged
+copies from the same user and role, from a run where the session tag did not apply. The mapper cannot
+tell an answer-key query from an analyst query without eval knowledge, which ADR-007 forbids. That
+run's result is discarded.
+
+**Decision.** `MAP_TERM` takes an optional `HISTORY_TAG`. When set, it reads only history carrying that
+tag, and records the restriction in the run's `NOTE`. The benchmark passes `SVC_WORKLOAD`, so it reads
+exactly the 34 workload queries. With no tag, behaviour is unchanged, which is the right default for a
+real estate where no answer key exists. The clean run read 34 queries, and its evidence cites real
+workload queries, not answer-key labels. Reference queries must only be run with the `SVC_EVAL` tag set
+in the same session.
+
+**Finding 2: `AI_COMPLETE` intermittently returns NULL or an empty string.** Seen on
+`CLAUDE-SONNET-5` with prompts of 13,547 to 25,102 characters, so size is not the trigger. A plain call
+with no response schema also returned an empty string during one failure, and a trivial prompt answered
+normally in a health check. `MAP_TERM` now makes up to five attempts, waiting 5, 15, 30 and 60 seconds,
+raises the temperature on retries, records any retries in `NOTE`, and on total failure reports what a
+schema-free call returned. One no-history run needed two NULL retries; the final run needed none that
+the `NOTE` records.
+
+**Finding 3: Snowpark binds Python `None` as the text `'None'`** in `INSERT ... SELECT ?` statements,
+which broke a NUMBER column on the first run. Nullable values are now sent as empty strings and
+converted with `NULLIF` in SQL.
+
+**What this does not show.** One term, one model, one run each. T3 is among the easier terms and the
+no-history run solved it unaided, so these runs do not show whether history helps. That needs the
+harder terms with conflicting definitions and several runs per condition.

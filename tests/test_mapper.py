@@ -174,7 +174,7 @@ class MapTermUnitTests(unittest.TestCase):
 class MapTermEndToEnd(unittest.TestCase):
     def test_happy_path_records_run(self):
         s = FakeSession(history=[{"QUERY_TEXT": "SELECT 1 FROM LOY.MBR", "RUNS": 2, "USERS": 1}])
-        out = MT["main"](s, "T3", "claude-sonnet-5", True, "ALDERGLEN_RAW")
+        out = MT["main"](s, "T3", "claude-sonnet-5", True, "ALDERGLEN_RAW", None)
         self.assertEqual(out["measure_value"], 42.0)
         self.assertEqual(out["history_queries"], 1)
         self.assertIn("-- run 2 time(s)", s.prompt)
@@ -185,25 +185,40 @@ class MapTermEndToEnd(unittest.TestCase):
             self.assertIn(excluded, hist_sql)
         self.assertIn("QUERY_TYPE = 'SELECT'", hist_sql)
 
+    def test_history_tag_restricts_history_query(self):
+        s = FakeSession(history=[{"QUERY_TEXT": "SELECT 1 FROM LOY.MBR", "RUNS": 1, "USERS": 1}])
+        MT["main"](s, "T3", "CLAUDE-SONNET-5", True, "ALDERGLEN_RAW", "SVC_WORKLOAD")
+        hist_sql, params = next((q, p) for q, p in s.calls if "QUERY_HISTORY" in q)
+        self.assertIn("AND QUERY_TAG = ?", hist_sql)
+        self.assertEqual(params, ["ALDERGLEN_RAW", "SVC_WORKLOAD"])
+        self.assertIn("history restricted to query tag SVC_WORKLOAD", s.inserted[-1])
+
+    def test_no_history_tag_leaves_query_unrestricted(self):
+        s = FakeSession(history=[{"QUERY_TEXT": "SELECT 1 FROM LOY.MBR", "RUNS": 1, "USERS": 1}])
+        MT["main"](s, "T3", "CLAUDE-SONNET-5", True, "ALDERGLEN_RAW", None)
+        hist_sql, params = next((q, p) for q, p in s.calls if "QUERY_HISTORY" in q)
+        self.assertNotIn("AND QUERY_TAG = ?", hist_sql)
+        self.assertEqual(params, ["ALDERGLEN_RAW"])
+
     def test_without_history_skips_query_history(self):
         s = FakeSession()
-        MT["main"](s, "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW")
+        MT["main"](s, "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
         self.assertFalse(any("QUERY_HISTORY" in q for q, _ in s.calls))
         self.assertIn("QUERY HISTORY: not provided", s.prompt)
 
     def test_refuses_without_isolation(self):
         with self.assertRaises(PermissionError):
-            MT["main"](FakeSession(role="SYSADMIN"), "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW")
+            MT["main"](FakeSession(role="SYSADMIN"), "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
         with self.assertRaises(PermissionError):
-            MT["main"](FakeSession(secondary='{"roles":"ALL"}'), "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW")
+            MT["main"](FakeSession(secondary='{"roles":"ALL"}'), "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
 
     def test_rejects_non_ga_model(self):
         with self.assertRaises(ValueError):
-            MT["main"](FakeSession(), "T3", "CLAUDE-4-SONNET", False, "ALDERGLEN_RAW")
+            MT["main"](FakeSession(), "T3", "CLAUDE-4-SONNET", False, "ALDERGLEN_RAW", None)
 
     def test_bad_measure_is_recorded_not_raised(self):
         bad = dict(PROPOSAL, measure_sql="DELETE FROM LOY.MBR")
-        out = MT["main"](FakeSession(proposal=bad), "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW")
+        out = MT["main"](FakeSession(proposal=bad), "T3", "CLAUDE-SONNET-5", False, "ALDERGLEN_RAW", None)
         self.assertIsNone(out["measure_value"])
         self.assertIn("read-only", out["measure_error"])
 

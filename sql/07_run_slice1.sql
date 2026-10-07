@@ -16,7 +16,8 @@ SELECT COUNT(*) FROM SVC_APP.EVAL.INFORMATION_SCHEMA.TABLES;
 CALL PROFILE_ESTATE();
 
 -- 3. Map the term with query history, then without.
-CALL MAP_TERM('T3');
+-- History is restricted to the simulated workload's tag so stray queries cannot leak the answer key (ADR-013).
+CALL MAP_TERM('T3', 'CLAUDE-SONNET-5', TRUE, 'ALDERGLEN_RAW', 'SVC_WORKLOAD');
 CALL MAP_TERM('T3', 'CLAUDE-SONNET-5', FALSE);
 
 -- 4. Results to send back (download as CSV).
