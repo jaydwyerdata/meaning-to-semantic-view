@@ -246,8 +246,9 @@ history restricted to the simulated workload.
 
 **Result.** All three proposals chose `LOY.PTS_TXN` where `TXN_CD = 'RDM'` and `LOY.EML_EVT` where
 `EVT_TYP = 'OPN'`, each in a 60-day window, counted per member, and rejected `LOY.MBR.CARD_STAT` as the
-trap. All three measure queries returned 794. That figure has not yet been checked against
-`eval/reference_queries.sql`, so it shows the three runs agree, not that they are right. The no-history
+trap. All three measure queries returned 794. The reference query in `eval/reference_queries.sql`,
+run as `SVC_EVALUATOR` with the `SVC_EVAL` tag on the same day, also returned 794, so the three runs
+match the ground truth. The no-history
 run reached the same mapping from catalog metadata and sample values alone (ADR-010, point 1).
 
 **Finding 1: the first with-history run was contaminated.** Its evidence quoted queries labelled

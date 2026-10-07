@@ -56,8 +56,8 @@ Early build. What exists today:
 - **Mapping step (layer 2)**: Python stored procedures that profile the estate and ask Cortex to map
   one term at a time, with evidence, under a role that cannot see the answer key. Unit tested offline
   and run in Snowflake for one term (T3, engaged member): the proposals chose the right sources and
-  rejected the card-status trap with and without query history, and their measure queries agreed
-  (not yet checked against the reference query). One term and one model only. See
+  rejected the card-status trap with and without query history, and their measure queries returned
+  794, matching the reference query. One term and one model only. See
   [ADR-012](docs/architecture-decisions.md#adr-012-the-mapper-runs-inside-snowflake-under-its-own-isolated-role-3-october-2026)
   and [ADR-013](docs/architecture-decisions.md#adr-013-first-snowflake-run-of-the-mapper-and-a-history-leak-caught-7-october-2026).
 
