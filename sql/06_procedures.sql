@@ -195,6 +195,7 @@ EXCLUDED_TAGS = ("SVC_BUILD", "SVC_EVAL")           # ADR-007
 EXCLUDED_ROLES = ("SVC_MAPPER", "SVC_EVALUATOR")    # the tool's own queries are not evidence
 HISTORY_DAYS = 90
 HISTORY_LIMIT = 200
+MODEL_ATTEMPTS = 3          # AI_COMPLETE can return NULL transiently; retry, then fail with a clear message
 QUERY_CHARS = 2000
 WRITE_WORDS = re.compile(
     r"\b(INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|GRANT|REVOKE|CALL|COPY|PUT|TRUNCATE|EXECUTE|USE)\b",
@@ -424,12 +425,32 @@ def main(session, term_id, model, use_history, raw_db):
         ).collect()]
 
     prompt = build_prompt(term, catalog, format_history(history_rows))
-    response = session.sql(
-        f"SELECT AI_COMPLETE('{model}', ?, {{'temperature': 0, 'max_tokens': 8192}}, "
-        f"{{'type': 'json', 'schema': {schema_literal(RESPONSE_SCHEMA)}}}, TRUE)",
-        params=[prompt],
-    ).collect()[0][0]
-    response = json.loads(response) if isinstance(response, str) else response
+    response = None
+    for attempt in range(1, MODEL_ATTEMPTS + 1):
+        response = session.sql(
+            f"SELECT AI_COMPLETE('{model}', ?, {{'temperature': {0 if attempt == 1 else 0.3}, 'max_tokens': 8192}}, "
+            f"{{'type': 'json', 'schema': {schema_literal(RESPONSE_SCHEMA)}}}, TRUE)",
+            params=[prompt],
+        ).collect()[0][0]
+        response = json.loads(response) if isinstance(response, str) else response
+        if response is not None:
+            if attempt > 1:
+                retry_note = f"AI_COMPLETE returned NULL {attempt - 1} time(s) before this answer"
+                model_note = f"{model_note}; {retry_note}" if model_note else retry_note
+            break
+    if response is None:
+        # Diagnose: the same prompt with no response schema, to separate "model or prompt problem"
+        # from "structured output problem". The reply is shown in the error, not stored.
+        try:
+            plain = session.sql(
+                f"SELECT AI_COMPLETE('{model}', ?, {{'temperature': 0, 'max_tokens': 300}})",
+                params=[prompt],
+            ).collect()[0][0]
+            diag = f"plain call (no schema) returned: {str(plain)[:400]!r}"
+        except Exception as e:
+            diag = f"plain call (no schema) raised: {str(e)[:400]}"
+        raise ValueError(f"AI_COMPLETE returned NULL on all {MODEL_ATTEMPTS} attempts "
+                         f"(prompt {len(prompt)} chars, use_history={bool(use_history)}); {diag}")
     proposal = extract_structured(response)
 
     measure_sql, measure_value, measure_error = proposal.get("measure_sql"), None, None
