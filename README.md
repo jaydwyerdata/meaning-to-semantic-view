@@ -90,6 +90,9 @@ sql/05_glossary.sql           loads the glossary (generated)
 sql/06_procedures.sql         mapping step procedures (generated)
 sql/07_run_slice1.sql         profiles the estate and maps one term, with and without history
 sql/08_run_slice1b.sql        maps two conflicting terms, two runs each with and without history
+sql/09_interview_setup.sql    interviewer role, schema and draft tables for the layer 1 app (run as ACCOUNTADMIN)
+sql/10_closed_loop.sql        promotes a confirmed interview draft into the glossary, then maps it
+app/interview_app.py          the layer 1 interview: paste into a Streamlit app in SVC_APP.INTERVIEW (generated)
 eval/reference_queries.sql    ground-truth answers for each business term
 ```
 

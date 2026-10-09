@@ -28,12 +28,21 @@ PROCEDURES = [
                      "USE_HISTORY BOOLEAN DEFAULT TRUE, RAW_DB STRING DEFAULT 'ALDERGLEN_RAW', "
                      "HISTORY_TAG STRING DEFAULT NULL)",
     },
+    {
+        # Reuses the interview's own completeness and identifier checks, so promotion applies
+        # exactly the rules the app enforced.
+        "module": "promote_term.py",
+        "extra": ["interview.py"],
+        "signature": "PROMOTE_TERM(DRAFT_ID STRING, TERM_ID STRING, APP_DB STRING DEFAULT 'SVC_APP')",
+    },
 ]
 
 
-def handler_source(module: str) -> str:
-    """common.py inlined ahead of the module: stored procedures cannot import sibling files."""
-    src = (ROOT / "python" / "common.py").read_text() + "\n\n" + (ROOT / "python" / module).read_text()
+def handler_source(module: str, extra=()) -> str:
+    """common.py (and any extra modules) inlined ahead of the module: stored procedures cannot import
+    sibling files."""
+    parts = ["common.py", *extra, module]
+    src = "\n\n".join((ROOT / "python" / name).read_text() for name in parts)
     if "$$" in src:
         raise ValueError(f"{module} contains $$, which would end the procedure body")
     return src
@@ -68,6 +77,9 @@ CREATE TABLE IF NOT EXISTS PROPOSALS (
     out.append("""
 -- Earlier versions had no HISTORY_TAG argument. Drop that signature so a call is never ambiguous.
 DROP PROCEDURE IF EXISTS MAP_TERM(STRING, STRING, BOOLEAN, STRING);
+
+-- One row per interview draft promoted into GLOSSARY. The mapper never writes the drafts themselves.
+CREATE TABLE IF NOT EXISTS PROMOTIONS (DRAFT_ID STRING, TERM_ID STRING, PROMOTED_AT TIMESTAMP_LTZ);
 """)
     for p in PROCEDURES:
         out.append(f"""
@@ -80,7 +92,7 @@ CREATE OR REPLACE PROCEDURE {p['signature']}
   EXECUTE AS CALLER
 AS
 $$
-{handler_source(p['module'])}
+{handler_source(p['module'], p.get('extra', ()))}
 $$;
 """)
     return "".join(out)

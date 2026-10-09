@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS PROPOSALS (
 -- Earlier versions had no HISTORY_TAG argument. Drop that signature so a call is never ambiguous.
 DROP PROCEDURE IF EXISTS MAP_TERM(STRING, STRING, BOOLEAN, STRING);
 
+-- One row per interview draft promoted into GLOSSARY. The mapper never writes the drafts themselves.
+CREATE TABLE IF NOT EXISTS PROMOTIONS (DRAFT_ID STRING, TERM_ID STRING, PROMOTED_AT TIMESTAMP_LTZ);
+
 CREATE OR REPLACE PROCEDURE PROFILE_ESTATE(RAW_DB STRING DEFAULT 'ALDERGLEN_RAW')
   RETURNS VARIANT
   LANGUAGE PYTHON
@@ -521,5 +524,341 @@ def main(session, term_id, model, use_history, raw_db, history_tag):
             "history_queries": len(history_rows), "measure_value": measure_value,
             "measure_error": measure_error, "components": len(proposal.get("components", [])),
             "questions_for_business": proposal.get("questions_for_business", [])}
+
+$$;
+
+CREATE OR REPLACE PROCEDURE PROMOTE_TERM(DRAFT_ID STRING, TERM_ID STRING, APP_DB STRING DEFAULT 'SVC_APP')
+  RETURNS VARIANT
+  LANGUAGE PYTHON
+  RUNTIME_VERSION = '3.11'
+  PACKAGES = ('snowflake-snowpark-python')
+  HANDLER = 'main'
+  EXECUTE AS CALLER
+AS
+$$
+"""Shared checks, inlined into each stored procedure by tools/build_sql.py."""
+import json
+import re
+
+IDENT = re.compile(r"^[A-Z][A-Z0-9_]{0,254}$")
+MAPPER_ROLE = "SVC_MAPPER"
+
+
+def check_ident(name: str) -> str:
+    """Reject anything that is not a plain unquoted identifier before it reaches dynamic SQL."""
+    if not IDENT.match(name or ""):
+        raise ValueError(f"Not a plain identifier: {name!r}")
+    return name
+
+
+def secondary_roles_off(raw: str) -> bool:
+    """CURRENT_SECONDARY_ROLES() returns JSON; isolation needs its roles list to be empty."""
+    try:
+        roles = json.loads(raw).get("roles", "")
+    except (TypeError, ValueError):
+        return False
+    return roles in ("", None, [])
+
+
+def require_mapper_role(session) -> None:
+    """Refuse to run unless the session is SVC_MAPPER alone. Secondary roles would let the
+    procedure inherit the user's other roles and read the answer key, defeating ADR-012."""
+    role, secondary = session.sql("SELECT CURRENT_ROLE(), CURRENT_SECONDARY_ROLES()").collect()[0]
+    if role != MAPPER_ROLE or not secondary_roles_off(secondary):
+        raise PermissionError(
+            f"Run as {MAPPER_ROLE} with secondary roles off: "
+            f"USE ROLE {MAPPER_ROLE}; USE SECONDARY ROLES NONE;  (current: {role}, {secondary})"
+        )
+
+
+def _nz(v):
+    """Snowpark binds Python None as the text 'None', so send an empty string and NULLIF it in SQL."""
+    return "" if v is None else str(v)
+
+
+"""Layer 1 interview logic (docs/layer1-slice-plan.md). Pure functions with no Snowflake dependency, so
+they are unit tested offline and imported by the Streamlit app. The interview collects meaning only:
+nothing here knows a table or column name, except the denylist the engineer supplies for the output check."""
+import json
+import re
+
+REQUIRED = ["term", "owner", "said_by", "definition", "counted_per", "questions"]
+OPTIONAL = ["excludes", "synonyms", "broken_down_by", "systems_mentioned", "why_it_matters"]
+LIST_FIELDS = {"excludes", "synonyms", "broken_down_by", "questions"}
+MIN_QUESTIONS = 2
+
+PROMPTS = {
+    "term": "What is the business term you want to define, in the words your team uses?",
+    "owner": "Which team owns this term?",
+    "said_by": "What is your role?",
+    "definition": "In your own words, when does something count as this term? Include any time period.",
+    "counted_per": "What is one of them, exactly? One customer, one order, one member?",
+    "questions": "What questions do people ask that depend on this term? Give me a few, as you would ask them.",
+    "excludes": "Is anything deliberately left out, such as internal accounts or test records?",
+    "synonyms": "Do people use other names for the same thing?",
+    "broken_down_by": "How do people usually split or group it, such as by channel, region or month?",
+    "systems_mentioned": "Where do you look when you need this number, and how fresh is it?",
+    "why_it_matters": "Why does this definition matter to you? What goes wrong when it is unclear?",
+}
+
+EXTRACTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "term": {"type": "string"}, "owner": {"type": "string"}, "said_by": {"type": "string"},
+        "definition": {"type": "string"}, "counted_per": {"type": "string"},
+        "systems_mentioned": {"type": "string"}, "why_it_matters": {"type": "string"},
+        "excludes": {"type": "array", "items": {"type": "string"}},
+        "synonyms": {"type": "array", "items": {"type": "string"}},
+        "broken_down_by": {"type": "array", "items": {"type": "string"}},
+        "questions": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [],
+}
+
+# An identifier that no business user would say: SCHEMA.TABLE, or UPPER_SNAKE_CASE.
+IDENTIFIER_SHAPES = [re.compile(r"\b[A-Z][A-Z0-9]{1,9}\.[A-Z][A-Z0-9_]{1,}\b"),
+                     re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b")]
+
+
+def _empty(value):
+    return value is None or value == "" or value == [] or (isinstance(value, str) and not value.strip())
+
+
+def new_draft():
+    return {}
+
+
+def missing_fields(draft):
+    """Required fields still missing. Questions need at least MIN_QUESTIONS."""
+    out = []
+    for f in REQUIRED:
+        v = draft.get(f)
+        if f == "questions":
+            if not isinstance(v, list) or len([q for q in v if str(q).strip()]) < MIN_QUESTIONS:
+                out.append(f)
+        elif _empty(v):
+            out.append(f)
+    return out
+
+
+def next_focus(draft, asked_optional=()):
+    """The checklist, not the model, decides what is asked next: required fields first, then each
+    optional field once."""
+    missing = missing_fields(draft)
+    if missing:
+        return missing[0]
+    for f in OPTIONAL:
+        if _empty(draft.get(f)) and f not in asked_optional:
+            return f
+    return None
+
+
+def is_complete(draft, asked_optional=()):
+    return next_focus(draft, asked_optional) is None
+
+
+def can_confirm(draft):
+    return not missing_fields(draft)
+
+
+def merge_extraction(draft, extracted):
+    """Non-empty extracted values replace the draft's; empty ones never erase what the user already said."""
+    out = dict(draft)
+    for f in REQUIRED + OPTIONAL:
+        v = (extracted or {}).get(f)
+        if _empty(v):
+            continue
+        if f in LIST_FIELDS:
+            v = [str(x).strip() for x in (v if isinstance(v, list) else [v]) if str(x).strip()]
+            if not v:
+                continue
+        elif isinstance(v, str):
+            v = " ".join(v.split())
+        out[f] = v
+    return out
+
+
+def build_system_prompt(draft, focus):
+    known = {k: v for k, v in draft.items() if not _empty(v)}
+    return (
+        "You are interviewing a business person to capture what one business term means to them. "
+        "Rules: use only plain business language. Never mention tables, columns, databases, schemas, SQL "
+        "or system field names, and if the person uses one, ask them to describe it in business words "
+        "instead. Ask exactly one short question at a time. Do not suggest answers or fill gaps with "
+        "guesses. Do not lecture. If their answer is vague, ask for one concrete example.\n\n"
+        f"What you have so far (JSON): {json.dumps(known, ensure_ascii=False)}\n"
+        f"The next thing to find out is: {focus} ({PROMPTS.get(focus, focus)})\n"
+        "Reply with only your next question."
+    )
+
+
+def build_extraction_prompt(turns):
+    convo = "\n".join(f"{t['speaker'].upper()}: {t['content']}" for t in turns)
+    return (
+        "Read this interview and extract what the BUSINESS PERSON said into the fields below. Use only "
+        "what they said, in their words. Leave a field out if they did not say it. Do not invent. "
+        "Questions are questions the person would ask of the data.\n\n"
+        f"INTERVIEW\n{convo}\n"
+    )
+
+
+def find_schema_words(text, denylist=()):
+    """Identifiers found in text: anything on the engineer's denylist (matched case-sensitively, because
+    catalog names are upper case and ordinary words are not), or shaped like SCHEMA.TABLE or UPPER_SNAKE_CASE. An empty list means the text is safe to show a business user."""
+    hits = []
+    for name in denylist:
+        if name and re.search(rf"\b{re.escape(name)}\b", text):   # case-sensitive: "NAME" is a column, "name" is a word
+            hits.append(name)
+    for rx in IDENTIFIER_SHAPES:
+        hits.extend(m.group(0) for m in rx.finditer(text))
+    seen, out = set(), []
+    for h in hits:
+        if h.upper() not in seen:
+            seen.add(h.upper())
+            out.append(h)
+    return out
+
+
+def readback(draft):
+    """The draft as plain sentences for the user to confirm or correct."""
+    d = draft
+    lines = []
+    if d.get("term"):
+        lines.append(f"The term is \"{d['term']}\", owned by {d.get('owner', 'your team')}.")
+    if d.get("definition"):
+        lines.append(f"You said it means: {d['definition'].rstrip('.')}.")
+    if d.get("counted_per"):
+        lines.append(f"It is counted per: {d['counted_per'].rstrip('.')}.")
+    for label, key in (("Left out", "excludes"), ("Also called", "synonyms"), ("Usually split by", "broken_down_by")):
+        if d.get(key):
+            lines.append(f"{label}: {', '.join(d[key])}.")
+    if d.get("systems_mentioned"):
+        lines.append(f"Where you look: {d['systems_mentioned'].rstrip('.')}.")
+    if d.get("why_it_matters"):
+        lines.append(f"Why it matters: {d['why_it_matters'].rstrip('.')}.")
+    if d.get("questions"):
+        lines.append("Questions people ask:")
+        lines.extend(f"  - {q}" for q in d["questions"])
+    return "\n".join(lines)
+
+
+def to_glossary_term(draft, term_id):
+    """A confirmed draft as a glossary entry in the same shape as glossary/terms.yaml."""
+    missing = missing_fields(draft)
+    if missing:
+        raise ValueError(f"Cannot promote: missing {', '.join(missing)}")
+    entry = {"id": term_id}
+    for f in ["term", "owner", "said_by", "definition", "excludes", "synonyms", "counted_per",
+              "broken_down_by", "systems_mentioned", "why_it_matters", "questions"]:
+        if not _empty(draft.get(f)):
+            entry[f] = draft[f]
+    leaks = find_schema_words(json.dumps(entry, ensure_ascii=False))
+    if leaks:
+        raise ValueError(f"Cannot promote: schema-like words in the entry: {', '.join(leaks)}")
+    return entry
+
+
+SINGLE_FIELDS = ["term", "owner", "said_by", "definition", "counted_per", "systems_mentioned", "why_it_matters"]
+MAX_ASKS = 2   # after this many asks with no progress on a required field, take the user's words as the answer
+
+
+def schema_literal(schema):
+    """AI_COMPLETE takes response_format as a SQL object constant, not a string."""
+    text = json.dumps(schema)
+    if "'" in text:
+        raise ValueError("Schema text must not contain single quotes")
+    return text.replace('"', "'")
+
+
+def parse_structured(response):
+    """AI_COMPLETE with show_details returns structured_output alongside usage; be tolerant of shape."""
+    if response is None or response == "":
+        return None
+    if isinstance(response, str):
+        response = json.loads(response)
+    out = response.get("structured_output", response) if isinstance(response, dict) else response
+    if isinstance(out, list):
+        out = out[0] if out else {}
+    if isinstance(out, dict) and "raw_message" in out:
+        out = out["raw_message"]
+    if isinstance(out, str):
+        out = json.loads(out)
+    return out if isinstance(out, dict) else None
+
+
+def clean_reply(text):
+    """A model reply as plain text: no wrapping quotes or whitespace. Empty means the call failed."""
+    if text is None:
+        return ""
+    s = str(text).strip()
+    if len(s) >= 2 and s[0] == s[-1] == '"':
+        try:
+            s = json.loads(s)
+        except ValueError:
+            s = s[1:-1]
+    return str(s).strip()
+
+
+def apply_focus_fallback(draft, focus, text):
+    """When extraction fails or makes no progress, take the user's own words as the answer to the field
+    just asked about, so the interview always moves on."""
+    raw = (text or "").strip()
+    if not raw or focus is None:
+        return dict(draft)
+    out = dict(draft)
+    if focus in SINGLE_FIELDS:
+        out[focus] = " ".join(raw.split())
+    elif focus == "questions":
+        parts = [" ".join(p.split()).strip(" -*") for p in re.split(r"[\n?]+", raw)]
+        qs = [p + "?" for p in parts if p]
+        out["questions"] = list(out.get("questions", [])) + qs
+    elif focus in LIST_FIELDS:
+        items = [" ".join(p.split()) for p in re.split(r"[,;\n]+", raw) if p.strip()]
+        if items:
+            out[focus] = items
+    return out
+
+
+"""PROMOTE_TERM: copies one confirmed interview draft into GLOSSARY, so MAP_TERM can map it.
+
+Layer 1, task 4 (docs/layer1-slice-plan.md). Runs as SVC_MAPPER, which can read the interview drafts
+but never write them: the promotion is recorded in the mapper's own PROMOTIONS table instead.
+"""
+
+
+def main(session, draft_id, term_id, app_db="SVC_APP"):
+    require_mapper_role(session)
+    db = check_ident(app_db)
+    term_id = check_ident(term_id)
+    app = f"{db}.MAPPER"
+
+    rows = session.sql(f"SELECT STATUS, TERM FROM {db}.INTERVIEW.TERM_DRAFTS WHERE DRAFT_ID = ?",
+                       params=[draft_id]).collect()
+    if not rows:
+        raise ValueError(f"No interview draft {draft_id!r}")
+    status, term = rows[0][0], rows[0][1]
+    if status != "CONFIRMED":
+        raise ValueError(f"Draft {draft_id} is {status}: only a draft the business user confirmed can be promoted")
+    draft = json.loads(term) if isinstance(term, str) else term
+
+    if session.sql(f"SELECT 1 FROM {app}.GLOSSARY WHERE TERM_ID = ?", params=[term_id]).collect():
+        raise ValueError(f"Glossary term {term_id} already exists; promote under a new TERM_ID")
+
+    # Completeness and the built-in identifier shapes are checked here.
+    entry = to_glossary_term(draft, term_id)
+    # Then every table and column name the mapper has profiled. The id is ours, so it is left out.
+    denylist = [r[0] for r in session.sql(
+        f"SELECT DISTINCT NAME FROM (SELECT TABLE_NAME AS NAME FROM {app}.COLUMN_PROFILE "
+        f"UNION SELECT COLUMN_NAME FROM {app}.COLUMN_PROFILE) WHERE LENGTH(NAME) >= 4").collect()]
+    leaks = find_schema_words(json.dumps({k: v for k, v in entry.items() if k != "id"}, ensure_ascii=False), denylist)
+    if leaks:
+        raise ValueError(f"Cannot promote: catalog names in the entry: {', '.join(leaks)}")
+
+    body = json.dumps(entry, ensure_ascii=False)
+    session.sql(f"INSERT INTO {app}.GLOSSARY SELECT ?, PARSE_JSON(?), CURRENT_TIMESTAMP()",
+                params=[term_id, body]).collect()
+    session.sql(f"INSERT INTO {app}.PROMOTIONS SELECT ?, ?, CURRENT_TIMESTAMP()",
+                params=[draft_id, term_id]).collect()
+    return {"term_id": term_id, "draft_id": draft_id, "term": entry.get("term"), "fields": sorted(entry)}
 
 $$;
