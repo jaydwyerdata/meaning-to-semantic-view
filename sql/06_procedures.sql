@@ -787,7 +787,7 @@ def parse_structured(response):
 
 
 def clean_reply(text):
-    """A model reply as plain text: no wrapping quotes or whitespace. Empty means the call failed."""
+    """A model reply as plain text: no wrapping quotes, whitespace or em dashes. Empty means the call failed."""
     if text is None:
         return ""
     s = str(text).strip()
@@ -796,7 +796,9 @@ def clean_reply(text):
             s = json.loads(s)
         except ValueError:
             s = s[1:-1]
-    return str(s).strip()
+    # House style: no em dashes in anything shown to the user, even when the model writes them.
+    s = re.sub(r"\s*\u2014\s*", ", ", str(s))
+    return s.strip()
 
 
 def apply_focus_fallback(draft, focus, text):

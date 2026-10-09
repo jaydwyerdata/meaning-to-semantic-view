@@ -118,6 +118,8 @@ class Helpers(unittest.TestCase):
         self.assertEqual(iv.clean_reply('  "Who owns it?"  '), "Who owns it?")
         self.assertEqual(iv.clean_reply('""'), "")
         self.assertEqual(iv.clean_reply(None), "")
+        self.assertEqual(iv.clean_reply("Why does it matter to you\u2014what goes wrong?"),
+                         "Why does it matter to you, what goes wrong?")
 
     def test_fallback_takes_the_users_words(self):
         self.assertEqual(iv.apply_focus_fallback({}, "owner", " Loyalty  team ")["owner"], "Loyalty team")
