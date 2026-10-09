@@ -237,6 +237,9 @@ class MapTermEndToEnd(unittest.TestCase):
 
     def test_parse_json_reply(self):
         pj = MT["parse_json_reply"]
+        # Seen in Snowflake: the plain reply arrives as a VARIANT string, i.e. quoted and escaped JSON text.
+        self.assertEqual(pj(json.dumps('{\n  "entity": {"table": "LOY.MBR"}\n}')), {"entity": {"table": "LOY.MBR"}})
+        self.assertEqual(pj(json.dumps('```json\n{"a": 1}\n```')), {"a": 1})
         self.assertEqual(pj('Here you go: {"a": 1} done'), {"a": 1})
         self.assertEqual(pj('```json\n{"a": 1}\n```'), {"a": 1})
         for bad in [None, "", "no json", "{broken", "[1, 2]"]:

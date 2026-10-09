@@ -115,6 +115,15 @@ def parse_json_reply(text):
     if text is None or str(text).strip() == "":
         return None
     t = str(text).strip()
+    if t.startswith('"'):
+        # AI_COMPLETE with an options argument returns a VARIANT, which reaches Python as JSON text: the
+        # reply arrives as a quoted, escaped JSON string. Decode it once before looking for the object.
+        try:
+            inner = json.loads(t)
+        except ValueError:
+            inner = None
+        if isinstance(inner, str):
+            t = inner.strip()
     if t.startswith("```"):
         t = t.strip("`")
         t = t[4:] if t[:4].lower() == "json" else t
