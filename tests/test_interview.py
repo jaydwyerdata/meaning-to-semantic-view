@@ -114,6 +114,11 @@ class Helpers(unittest.TestCase):
         self.assertIsNone(iv.parse_structured(None))
         self.assertIsNone(iv.parse_structured(""))
 
+    def test_extracted_values_lose_em_dashes(self):
+        d = iv.merge_extraction({}, {"definition": "Redeemed points\u2014or opened an email", "synonyms": ["active\u2014member"]})
+        self.assertEqual(d["definition"], "Redeemed points, or opened an email")
+        self.assertEqual(d["synonyms"], ["active, member"])
+
     def test_clean_reply(self):
         self.assertEqual(iv.clean_reply('  "Who owns it?"  '), "Who owns it?")
         self.assertEqual(iv.clean_reply('""'), "")

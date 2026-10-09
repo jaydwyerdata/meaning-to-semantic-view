@@ -86,6 +86,11 @@ def can_confirm(draft):
     return not missing_fields(draft)
 
 
+def _no_dash(text):
+    """House style: no em dashes in anything shown to the user or saved, even when the model writes them."""
+    return re.sub(r"\s*\u2014\s*", ", ", text)
+
+
 def merge_extraction(draft, extracted):
     """Non-empty extracted values replace the draft's; empty ones never erase what the user already said."""
     out = dict(draft)
@@ -94,11 +99,11 @@ def merge_extraction(draft, extracted):
         if _empty(v):
             continue
         if f in LIST_FIELDS:
-            v = [str(x).strip() for x in (v if isinstance(v, list) else [v]) if str(x).strip()]
+            v = [_no_dash(str(x)).strip() for x in (v if isinstance(v, list) else [v]) if str(x).strip()]
             if not v:
                 continue
         elif isinstance(v, str):
-            v = " ".join(v.split())
+            v = " ".join(_no_dash(v).split())
         out[f] = v
     return out
 
@@ -221,9 +226,7 @@ def clean_reply(text):
             s = json.loads(s)
         except ValueError:
             s = s[1:-1]
-    # House style: no em dashes in anything shown to the user, even when the model writes them.
-    s = re.sub(r"\s*\u2014\s*", ", ", str(s))
-    return s.strip()
+    return _no_dash(str(s)).strip()
 
 
 def apply_focus_fallback(draft, focus, text):
