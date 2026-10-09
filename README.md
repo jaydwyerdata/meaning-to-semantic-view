@@ -46,7 +46,7 @@ Early build. What exists today:
   (19 tables, 1,094,354 rows, no failed statements) and every designed trap holds in the real
   data. Results are in [ADR-008](docs/architecture-decisions.md#adr-008-estate-verified-in-snowflake-3-october-2026).
 - **Glossary**: the six business terms as business users stated them, with no schema, in
-  [glossary/terms.yaml](glossary/terms.yaml). Stands in for the layer 1 interview until it is built.
+  [glossary/terms.yaml](glossary/terms.yaml). Stands in for the layer 1 interview until that has run in Snowflake.
 - **Simulated query history**: 34 analyst queries, right and wrong in realistic proportion, so
   the mapping step has usage evidence to weigh. Run in Snowflake: all 34 succeeded. See
   [ADR-009](docs/architecture-decisions.md#adr-009-simulated-analyst-query-history-3-october-2026).
@@ -55,14 +55,20 @@ Early build. What exists today:
 
 - **Mapping step (layer 2)**: Python stored procedures that profile the estate and ask Cortex to map
   one term at a time, with evidence, under a role that cannot see the answer key. Unit tested offline
-  and run in Snowflake for one term (T3, engaged member): the proposals chose the right sources and
-  rejected the card-status trap with and without query history, and their measure queries returned
-  794, matching the reference query. One term and one model only. See
-  [ADR-012](docs/architecture-decisions.md#adr-012-the-mapper-runs-inside-snowflake-under-its-own-isolated-role-3-october-2026)
-  and [ADR-013](docs/architecture-decisions.md#adr-013-first-snowflake-run-of-the-mapper-and-a-history-leak-caught-7-october-2026).
+  and run in Snowflake for three terms on one model. T3 (engaged member): every run chose the right
+  sources, rejected the card-status trap and returned 794, matching the reference query, with or
+  without query history. T1 (active customer, marketing): both runs with history matched the
+  reference logic and value (2899); neither run without history did, because both kept cancelled
+  orders. T2 (active customer, finance): all runs avoided the ledger trap, and one run in each
+  condition matched the reference (1469); the others differed only on an open question for the
+  business. Two runs per condition: a direction, not a rate. See
+  [ADR-012](docs/architecture-decisions.md#adr-012-the-mapper-runs-inside-snowflake-under-its-own-isolated-role-3-october-2026),
+  [ADR-013](docs/architecture-decisions.md#adr-013-first-snowflake-run-of-the-mapper-and-a-history-leak-caught-7-october-2026)
+  and [ADR-014](docs/architecture-decisions.md#adr-014-query-history-measured-on-two-conflicting-terms-9-october-2026).
 
-Not yet built: the business user interview (layer 1), engineer review, and semantic view
-generation and validation (layer 3).
+Built and tested offline, not yet run in Snowflake: the business user interview (layer 1), a
+Streamlit app in `app/`. Not yet built: engineer review, and semantic view generation and validation
+(layer 3).
 
 ## Running it
 
@@ -83,6 +89,7 @@ sql/04_app_setup.sql          tool database and isolated roles (run as ACCOUNTAD
 sql/05_glossary.sql           loads the glossary (generated)
 sql/06_procedures.sql         mapping step procedures (generated)
 sql/07_run_slice1.sql         profiles the estate and maps one term, with and without history
+sql/08_run_slice1b.sql        maps two conflicting terms, two runs each with and without history
 eval/reference_queries.sql    ground-truth answers for each business term
 ```
 

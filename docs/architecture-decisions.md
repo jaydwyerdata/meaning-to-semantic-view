@@ -281,3 +281,46 @@ converted with `NULLIF` in SQL.
 **What this does not show.** One term, one model, one run each. T3 is among the easier terms and the
 no-history run solved it unaided, so these runs do not show whether history helps. That needs the
 harder terms with conflicting definitions and several runs per condition.
+
+## ADR-014: Query history measured on two conflicting terms (9 October 2026)
+
+**What ran.** `08_run_slice1b.sql`: `MAP_TERM` for T1 (active customer, marketing) and T2 (active
+customer, finance) on `CLAUDE-SONNET-5`, two runs with history restricted to `SVC_WORKLOAD` and two
+without, for each term. Five runs finished on 7 October; a failed call stopped the batch, and the last
+three ran on 9 October. Each run's measure query was compared component by component with
+`eval/answer_key.yaml`, and its value with the reference query run under the `SVC_EVAL` tag.
+
+**T1.** The reference returns 2899 as of 7 October. Both history runs produced the reference logic
+exactly: online orders excluding guests and cancellations, plus in-store sales, joined to the customer
+master, with internal accounts excluded. Both returned 2899. Their evidence cites the simulated
+workload: analyst queries filter `ORD_STAT <> 'CNL'`. Neither no-history run matched. Both left
+cancelled orders in: one never mentioned them, and the other saw the `CNL` status in sample values,
+rated it low confidence and asked the business instead. Both also kept only retail customers
+(`CUSTYP = 'R'`), which drops employees as well, an open question in the answer key. The no-history
+run on 7 October returned 2823. The one on 9 October is not compared on value, because the 90-day
+window had moved; it also built the online join by padding the customer number to eight digits, a
+format assumption the other runs did not make.
+
+**T2.** The reference returns 1469. All four runs chose the right sources, summed the store-credit
+ledger into a balance (the designed trap) and ignored purchase recency, so none confused the finance
+definition with the marketing one. Two runs, one from each condition, returned 1469. The other two
+returned 1413 because they also excluded employees. None applied the reference's literal reading of an
+open subscription (`END_DT IS NULL`); all four asked the business how to treat subscription status. On
+this data that filter does not change the count.
+
+**Result.** History made a measurable difference on T1, where the deciding detail is a convention in
+how analysts query the data rather than something the catalog states: 2 of 2 history runs matched the
+reference, against 0 of 2 without. On T2 it made no visible difference: 1 of 2 matched in each
+condition, and both misses came from an open question rather than a wrong mapping. This is consistent
+with ADR-010: the mapper works without history, and history raises accuracy where conventions live in
+usage.
+
+**Retries.** All five no-history runs across T1, T2 and T3 needed one to four retries after an empty
+`AI_COMPLETE` response; none of the five clean history runs did. That is too few runs to explain.
+After 7 October `MAP_TERM` gained a last-resort fallback: if structured output stays empty after every
+retry, it parses the same prompt's plain reply and says so in `NOTE`. It did not trigger in these runs,
+so it has not yet run in Snowflake.
+
+**What this does not show.** Two runs per condition, two terms, one model. It shows a direction on T1,
+not a rate. The open questions (employees, paused and legacy subscriptions) are the business owner's to
+settle in layer 1, and the scoring above does not count them as mapping errors.
