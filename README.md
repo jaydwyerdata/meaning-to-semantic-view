@@ -46,7 +46,7 @@ Early build. What exists today:
   (19 tables, 1,094,354 rows, no failed statements) and every designed trap holds in the real
   data. Results are in [ADR-008](docs/architecture-decisions.md#adr-008-estate-verified-in-snowflake-3-october-2026).
 - **Glossary**: the six business terms as business users stated them, with no schema, in
-  [glossary/terms.yaml](glossary/terms.yaml). Stands in for the layer 1 interview until that has run in Snowflake.
+  [glossary/terms.yaml](glossary/terms.yaml). The hand-written stand-in for the layer 1 interview, used as the baseline.
 - **Simulated query history**: 34 analyst queries, right and wrong in realistic proportion, so
   the mapping step has usage evidence to weigh. Run in Snowflake: all 34 succeeded. See
   [ADR-009](docs/architecture-decisions.md#adr-009-simulated-analyst-query-history-3-october-2026).
@@ -66,9 +66,15 @@ Early build. What exists today:
   [ADR-013](docs/architecture-decisions.md#adr-013-first-snowflake-run-of-the-mapper-and-a-history-leak-caught-7-october-2026)
   and [ADR-014](docs/architecture-decisions.md#adr-014-query-history-measured-on-two-conflicting-terms-9-october-2026).
 
-Built and tested offline, not yet run in Snowflake: the business user interview (layer 1), a
-Streamlit app in `app/`. Not yet built: engineer review, and semantic view generation and validation
-(layer 3).
+- **Business user interview (layer 1)**: a Streamlit in Snowflake app in `app/` that interviews a
+  business owner in plain language under its own role, `SVC_INTERVIEWER`, and saves a confirmed
+  definition as a draft. `PROMOTE_TERM` adds a confirmed draft to the glossary. Closed loop run in
+  Snowflake on 9 October: a T3 definition captured in the app, promoted and mapped, returned 769 with
+  and without query history, matching the reference query run the same day. One interview, one term:
+  it shows the loop works end to end, not how well real business users answer. See
+  [ADR-015](docs/architecture-decisions.md#adr-015-closed-loop-from-interview-to-mapping-run-in-snowflake-9-october-2026).
+
+Not yet built: engineer review, and semantic view generation and validation (layer 3).
 
 ## Running it
 

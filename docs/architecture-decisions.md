@@ -324,3 +324,32 @@ so it has not yet run in Snowflake.
 **What this does not show.** Two runs per condition, two terms, one model. It shows a direction on T1,
 not a rate. The open questions (employees, paused and legacy subscriptions) are the business owner's to
 settle in layer 1, and the scoring above does not count them as mapping errors.
+
+## ADR-015: Closed loop from interview to mapping, run in Snowflake (9 October 2026)
+
+**What ran.** `10_closed_loop.sql`. A T3 (engaged member) definition was captured in the interview app
+and confirmed, `PROMOTE_TERM` added it to the glossary as `T3I`, and `MAP_TERM` mapped it on
+`CLAUDE-SONNET-5` once without history and once with history restricted to `SVC_WORKLOAD`. The
+reference query ran the same day under the `SVC_EVAL` tag. The account runs on US Pacific time, so
+"the same day" means the same Snowflake date: the window is 60 days back from `CURRENT_DATE`.
+
+**Result.** Both runs returned 769, and the reference returned 769. Both chose the same logic as the
+reference: a points redemption (`TXN_CD = 'RDM'`) or an email open (`EVT_TYP = 'OPN'`) in the last 60
+days, counted once per member. Both counted members through the member master (`LOY.MBR`), where the
+reference takes the union of the two event tables directly; on this data that gives the same count.
+Query history made no difference to this term, consistent with ADR-013 and ADR-014: T3's definition is
+fully stated by the business, so there is no usage convention for history to supply.
+
+**The fallback ran for the first time.** In the run without history, structured output came back
+empty on all five attempts, so `MAP_TERM` used its plain-reply fallback (ADR-014). The first attempt
+failed: the plain reply contained a complete proposal, but `AI_COMPLETE` returns it as a VARIANT, which
+reaches Python as quoted, escaped JSON text, and the parser looked for the object without decoding it
+first. The parser now decodes a quoted reply once (commit 8ea1c38, with a test for that exact shape).
+The rerun succeeded and its `NOTE` records that the proposal was parsed from a plain reply. As in
+ADR-014, every run without history needed retries; the run with history did not.
+
+**What this does not show.** One interview, one term, one model. It shows the loop works end to end
+in Snowflake: business wording in, confirmed draft, glossary entry, mapping, a value that matches the
+reference. It does not show how well real business users answer an interview, which needs interviews
+with people who did not write the glossary.
+
