@@ -383,7 +383,16 @@ aggregate, as are the two T1 runs without history, one for joining its windows w
 an exclusion spanning two tables. Those two are also the T1 runs that missed the reference (ADR-014),
 but the shape check is not a correctness test; that is a side effect.
 
-**Not yet shown.** It has not run in Snowflake when this was written. Not built: engineer review of
-the generated DDL, business confirmation by example rows, and asking Cortex Analyst the users' own
-questions against the semantic view.
+**Run in Snowflake (10 October 2026, Brisbane; 9 October on the account's US Pacific clock).**
+`11_semantic_view.sql` for T3I, from the mapping run with history, worked on the first run.
+`SV_T3I` returned 769, the mapping's own measure returned 769 at the same moment, and the
+independent check (the semantic view next to the reference query, as the evaluator under the
+`SVC_EVAL` tag, same Snowflake date) returned 769 for both. The two ignored components (a note about
+card status, and a join to an unrelated system) were recorded with their reasons. Broken down by
+source, 558 members opened an email and 301 redeemed points, 859 in total, against 769 distinct
+members: 90 did both, and the metric counts each once.
+
+**Not yet shown.** One term, one shape. Not built: engineer review of the generated DDL, business
+confirmation by example rows, and asking Cortex Analyst the users' own questions against the
+semantic view.
 

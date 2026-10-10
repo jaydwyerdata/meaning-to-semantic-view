@@ -93,7 +93,8 @@ Early build. What exists today:
   into a Snowflake semantic view with no model call, for terms shaped as "had a qualifying event in
   the last N days", and refuses other shapes with the reason. It checks the semantic view's answer
   against the mapping's own measure. Unit tested offline against the 13 proposals the mapper produced
-  in Snowflake; not yet run in Snowflake. See
+  in Snowflake. Run in Snowflake for the interviewed T3 term: the semantic view returned 769, matching
+  the mapping and, checked independently, the reference query. One term, one shape. See
   [ADR-016](docs/architecture-decisions.md#adr-016-semantic-view-generation-is-deterministic-for-one-supported-shape-10-october-2026).
 
 Not yet built: engineer review of mappings and generated DDL, business confirmation by example rows,
