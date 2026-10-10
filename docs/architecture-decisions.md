@@ -328,8 +328,8 @@ settle in layer 1, and the scoring above does not count them as mapping errors.
 ## ADR-015: Closed loop from interview to mapping, run in Snowflake (9 October 2026)
 
 **What ran.** `10_closed_loop.sql`. A T3 (engaged member) definition was captured in the interview app
-and confirmed, `PROMOTE_TERM` added it to the glossary as `T3I`, and `MAP_TERM` mapped it on
-`CLAUDE-SONNET-5` once without history and once with history restricted to `SVC_WORKLOAD`. The
+and confirmed; I played the business owner, answering from T3's definition. Then `PROMOTE_TERM`
+added it to the glossary as `T3I`, and `MAP_TERM` mapped it on `CLAUDE-SONNET-5` once without history and once with history restricted to `SVC_WORKLOAD`. The
 reference query ran the same day under the `SVC_EVAL` tag. The account runs on US Pacific time, so
 "the same day" means the same Snowflake date: the window is 60 days back from `CURRENT_DATE`.
 
@@ -352,4 +352,38 @@ ADR-014, every run without history needed retries; the run with history did not.
 in Snowflake: business wording in, confirmed draft, glossary entry, mapping, a value that matches the
 reference. It does not show how well real business users answer an interview, which needs interviews
 with people who did not write the glossary.
+
+## ADR-016: Semantic view generation is deterministic, for one supported shape (10 October 2026)
+
+**Decision.** Layer 3 starts as a thin slice: `GENERATE_SEMANTIC_VIEW(term)` turns the latest
+successful mapping of a term into a Snowflake semantic view with no model call. The model proposes
+the logic in layer 2 and proves it with a number; this step only translates, and it proves the
+translation by querying the new semantic view and comparing the answer with the mapping's own measure
+query, run at the same moment. Both values and the generated DDL are recorded in `SEMANTIC_VIEWS`.
+
+**The supported shape.** "Counted once per thing, if it had a qualifying event in the last N days, in
+any of these sources." Every time window must read `SCHEMA.TABLE.COLUMN >= DATEADD(day, -N,
+CURRENT_DATE)`, windows on different sources are joined with OR, and every filter or exclusion is a
+plain predicate on one table. Anything else is refused with the reason: aggregate conditions,
+subqueries, windows joined with AND, filters spanning tables. The mapper's components are free text
+and vary between runs, so a refusal is safer than a guess. Model-written fragments become part of a
+view, so the same check rejects semicolons, comments, subqueries and write keywords.
+
+**The design.** A semantic view metric cannot say "in this table or that one", so the generator
+builds two objects. A view of qualifying events (one row per event, each source filtered and joined
+to the counted table, the window evaluated at query time) and a semantic view over it: the counted
+table with its key, the events view related to it, the event day and source as dimensions, and the
+distinct count as the metric, named from the business term and carrying its definition and synonyms.
+
+**Checked offline.** Run against the 13 proposals the mapper produced in Snowflake on 7 and 9
+October: all five engaged-member runs (T3 and T3I) and the two marketing active-customer (T1) runs
+with history are supported; one T3I run includes a join to an unrelated system, which is ignored and
+reported. The four finance active-customer (T2) runs are refused, since a positive balance needs an
+aggregate, as are the two T1 runs without history, one for joining its windows with AND and one for
+an exclusion spanning two tables. Those two are also the T1 runs that missed the reference (ADR-014),
+but the shape check is not a correctness test; that is a side effect.
+
+**Not yet shown.** It has not run in Snowflake when this was written. Not built: engineer review of
+the generated DDL, business confirmation by example rows, and asking Cortex Analyst the users' own
+questions against the semantic view.
 

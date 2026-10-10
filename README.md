@@ -17,6 +17,21 @@ answers live in conversations rather than anywhere queryable. This tool captures
 once, in the experts' own words, and turns it into a governed, reusable asset that engineers map
 and validate, a right-sized step up in governance rather than a programme to stand up first.
 
+## Why this approach
+
+Many organisations, especially smaller ones, have no data stewards and no formal governance
+programme. Even where they exist, big-bang governance often stalls because it asks too much of busy
+people. This takes the lightweight route:
+
+- **One term at a time, tied to a real business problem.** Each definition is captured because
+  someone needs it now, not because a framework says so.
+- **No new roles, domains or tools for the business.** A business owner answers plain-language
+  questions about a term they already use.
+- **A consistent, reusable output.** Every term ends as a confirmed definition, a mapping with
+  evidence, and a semantic view, each checked against a number.
+- **A head start, not a dead end.** If formal governance comes later, the captured meaning is
+  already there to build on.
+
 ## How it works
 
 Three layers, each with a different audience:
@@ -74,7 +89,15 @@ Early build. What exists today:
   it shows the loop works end to end, not how well real business users answer. See
   [ADR-015](docs/architecture-decisions.md#adr-015-closed-loop-from-interview-to-mapping-run-in-snowflake-9-october-2026).
 
-Not yet built: engineer review, and semantic view generation and validation (layer 3).
+- **Semantic view generation (layer 3), thin slice**: `GENERATE_SEMANTIC_VIEW` turns a mapped term
+  into a Snowflake semantic view with no model call, for terms shaped as "had a qualifying event in
+  the last N days", and refuses other shapes with the reason. It checks the semantic view's answer
+  against the mapping's own measure. Unit tested offline against the 13 proposals the mapper produced
+  in Snowflake; not yet run in Snowflake. See
+  [ADR-016](docs/architecture-decisions.md#adr-016-semantic-view-generation-is-deterministic-for-one-supported-shape-10-october-2026).
+
+Not yet built: engineer review of mappings and generated DDL, business confirmation by example rows,
+and asking Cortex Analyst the users' own questions against the semantic view.
 
 ## Running it
 
@@ -98,6 +121,7 @@ sql/07_run_slice1.sql         profiles the estate and maps one term, with and wi
 sql/08_run_slice1b.sql        maps two conflicting terms, two runs each with and without history
 sql/09_interview_setup.sql    interviewer role, schema and draft tables for the layer 1 app (run as ACCOUNTADMIN)
 sql/10_closed_loop.sql        promotes a confirmed interview draft into the glossary, then maps it
+sql/11_semantic_view.sql      generates a semantic view from a mapped term and checks it
 app/interview_app.py          the layer 1 interview: paste into a Streamlit app in SVC_APP.INTERVIEW (generated)
 eval/reference_queries.sql    ground-truth answers for each business term
 ```

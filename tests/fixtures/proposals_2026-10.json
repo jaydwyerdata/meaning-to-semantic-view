@@ -1,0 +1,687 @@
+[
+ {
+  "term_id": "T3",
+  "use_history": true,
+  "created_at": "2026-10-07 06:18:42.230 -0700",
+  "measure_value": 794.0,
+  "proposal": {
+   "entity": {
+    "table": "LOY.MBR",
+    "key_columns": [
+     "MBR_ID"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "LOY.MBR.MBR_ID"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.PTS_TXN.MBR_ID, LOY.PTS_TXN.TXN_CD, LOY.PTS_TXN.TXN_DT"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.EML_EVT.MBR_ID, LOY.EML_EVT.EVT_TYP, LOY.EML_EVT.EVT_TS"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.PTS_TXN.TXN_DT >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.EML_EVT.EVT_TS >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.PTS_TXN.TXN_CD = 'RDM'"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.EML_EVT.EVT_TYP = 'OPN'"
+    },
+    {
+     "role": "join",
+     "expression": "LOY.MBR.MBR_ID = LOY.PTS_TXN.MBR_ID"
+    },
+    {
+     "role": "join",
+     "expression": "LOY.MBR.MBR_ID = LOY.EML_EVT.MBR_ID"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- LOY.MBR.CARD_STAT is excluded from the engaged-member logic"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT m.MBR_ID) AS engaged_members\nFROM LOY.MBR m\nWHERE m.MBR_ID IN (\n    SELECT MBR_ID FROM LOY.PTS_TXN\n    WHERE TXN_CD = 'RDM' AND TXN_DT >= DATEADD(day, -60, CURRENT_DATE())\n    UNION\n    SELECT MBR_ID FROM LOY.EML_EVT\n    WHERE EVT_TYP = 'OPN' AND EVT_TS >= DATEADD(day, -60, CURRENT_DATE())\n)"
+  }
+ },
+ {
+  "term_id": "T3",
+  "use_history": false,
+  "created_at": "2026-10-07 06:28:12.009 -0700",
+  "measure_value": 794.0,
+  "proposal": {
+   "entity": {
+    "table": "LOY.MBR",
+    "key_columns": [
+     "MBR_ID"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "LOY.MBR.MBR_ID"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.PTS_TXN.MBR_ID, LOY.PTS_TXN.TXN_CD, LOY.PTS_TXN.TXN_DT"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.EML_EVT.MBR_ID, LOY.EML_EVT.EVT_TYP, LOY.EML_EVT.EVT_TS"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.PTS_TXN.TXN_CD = 'RDM'"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.EML_EVT.EVT_TYP = 'OPN'"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.PTS_TXN.TXN_DT >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.EML_EVT.EVT_TS >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- CARD_STAT is not used as a filter"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT MBR_ID) AS engaged_members\nFROM (\n  SELECT MBR_ID FROM LOY.PTS_TXN\n  WHERE TXN_CD = 'RDM' AND TXN_DT >= DATEADD(day, -60, CURRENT_DATE())\n  UNION\n  SELECT MBR_ID FROM LOY.EML_EVT\n  WHERE EVT_TYP = 'OPN' AND EVT_TS >= DATEADD(day, -60, CURRENT_DATE())\n) engaged"
+  }
+ },
+ {
+  "term_id": "T3",
+  "use_history": true,
+  "created_at": "2026-10-07 06:42:56.060 -0700",
+  "measure_value": 794.0,
+  "proposal": {
+   "entity": {
+    "table": "LOY.MBR",
+    "key_columns": [
+     "MBR_ID"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "LOY.MBR.MBR_ID"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.PTS_TXN.MBR_ID, LOY.PTS_TXN.TXN_CD, LOY.PTS_TXN.TXN_DT"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.EML_EVT.MBR_ID, LOY.EML_EVT.EVT_TYP, LOY.EML_EVT.EVT_TS"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.PTS_TXN.TXN_DT >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.EML_EVT.EVT_TS >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.PTS_TXN.TXN_CD = 'RDM'"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.EML_EVT.EVT_TYP = 'OPN'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- LOY.MBR.CARD_STAT is NOT used as a filter"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT m.MBR_ID) AS engaged_members\nFROM LOY.MBR m\nWHERE m.MBR_ID IN (\n    SELECT MBR_ID FROM LOY.PTS_TXN\n    WHERE TXN_CD = 'RDM' AND TXN_DT >= DATEADD(day, -60, CURRENT_DATE())\n  )\n  OR m.MBR_ID IN (\n    SELECT MBR_ID FROM LOY.EML_EVT\n    WHERE EVT_TYP = 'OPN' AND EVT_TS >= DATEADD(day, -60, CURRENT_DATE())\n  )"
+  }
+ },
+ {
+  "term_id": "T1",
+  "use_history": true,
+  "created_at": "2026-10-07 06:50:16.785 -0700",
+  "measure_value": 2899.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "OMS.ORD_HDR"
+    },
+    {
+     "role": "source",
+     "expression": "POS.TXN_HDR"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = TRY_TO_NUMBER(SUBSTR(OMS.ORD_HDR.CUST_REF, 2))"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = POS.TXN_HDR.CUST_NO"
+    },
+    {
+     "role": "filter",
+     "expression": "OMS.ORD_HDR.ORD_STAT <> 'CNL'"
+    },
+    {
+     "role": "filter",
+     "expression": "POS.TXN_HDR.TXN_TYP = 'S'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.CUSTYP <> 'I'"
+    },
+    {
+     "role": "time_window",
+     "expression": "OMS.ORD_HDR.ORD_TS >= DATEADD(day, -90, CURRENT_DATE()) OR POS.TXN_HDR.TXN_DT >= DATEADD(day, -90, CURRENT_DATE())"
+    },
+    {
+     "role": "exclusion",
+     "expression": "OMS.ORD_HDR.CUST_REF <> 'GUEST'"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM ERP.CUSMST c\nWHERE c.CUSTYP <> 'I'\n  AND (\n    EXISTS (\n      SELECT 1 FROM OMS.ORD_HDR h\n      WHERE TRY_TO_NUMBER(SUBSTR(h.CUST_REF, 2)) = c.CUSNO\n        AND h.CUST_REF <> 'GUEST'\n        AND h.ORD_STAT <> 'CNL'\n        AND h.ORD_TS >= DATEADD(day, -90, CURRENT_DATE())\n    )\n    OR EXISTS (\n      SELECT 1 FROM POS.TXN_HDR t\n      WHERE t.CUST_NO = c.CUSNO\n        AND t.TXN_TYP = 'S'\n        AND t.TXN_DT >= DATEADD(day, -90, CURRENT_DATE())\n    )\n  )"
+  }
+ },
+ {
+  "term_id": "T1",
+  "use_history": false,
+  "created_at": "2026-10-07 06:55:22.400 -0700",
+  "measure_value": 2823.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "OMS.ORD_HDR.ORD_ID, OMS.ORD_HDR.CUST_REF, OMS.ORD_HDR.CHNL_CD, OMS.ORD_HDR.ORD_TS"
+    },
+    {
+     "role": "source",
+     "expression": "POS.TXN_HDR.TXN_ID, POS.TXN_HDR.CUST_NO, POS.TXN_HDR.TXN_DT, POS.TXN_HDR.TXN_TYP"
+    },
+    {
+     "role": "join",
+     "expression": "POS.TXN_HDR.CUST_NO = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "join",
+     "expression": "TRY_TO_NUMBER(SUBSTR(OMS.ORD_HDR.CUST_REF,2)) = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "filter",
+     "expression": "ERP.CUSMST.CUSTYP = 'R'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "OMS.ORD_HDR.CUST_REF <> 'GUEST'"
+    },
+    {
+     "role": "time_window",
+     "expression": "OMS.ORD_HDR.ORD_TS >= DATEADD(day, -90, CURRENT_DATE()) AND POS.TXN_HDR.TXN_DT >= DATEADD(day, -90, CURRENT_DATE())"
+    },
+    {
+     "role": "exclusion",
+     "expression": "N/A - LOY.EML_EVT and LOY.MBR are not used as the source of order activity"
+    }
+   ],
+   "measure_sql": "WITH recent_online AS (\n  SELECT DISTINCT TRY_TO_NUMBER(SUBSTR(h.CUST_REF, 2)) AS CUSNO\n  FROM OMS.ORD_HDR h\n  WHERE h.CUST_REF <> 'GUEST'\n    AND h.ORD_TS >= DATEADD(day, -90, CURRENT_DATE())\n),\nrecent_store AS (\n  SELECT DISTINCT t.CUST_NO AS CUSNO\n  FROM POS.TXN_HDR t\n  WHERE t.CUST_NO IS NOT NULL\n    AND t.TXN_TYP = 'S'\n    AND t.TXN_DT >= DATEADD(day, -90, CURRENT_DATE())\n),\nrecent_any AS (\n  SELECT CUSNO FROM recent_online\n  UNION\n  SELECT CUSNO FROM recent_store\n)\nSELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM recent_any r\nJOIN ERP.CUSMST c ON c.CUSNO = r.CUSNO\nWHERE c.CUSTYP = 'R'"
+  }
+ },
+ {
+  "term_id": "T2",
+  "use_history": true,
+  "created_at": "2026-10-07 06:56:11.836 -0700",
+  "measure_value": 1469.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "SELECT DISTINCT CUSNO FROM BIL.SUB WHERE STAT = 'A'"
+    },
+    {
+     "role": "source",
+     "expression": "SELECT CUSNO FROM ERP.SCLDGR GROUP BY CUSNO HAVING SUM(TXNAMT) > 0"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = BIL.SUB.CUSNO  AND  ERP.CUSMST.CUSNO = ERP.SCLDGR.CUSNO"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.CUSTYP <> 'I'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.STSCD"
+    },
+    {
+     "role": "filter",
+     "expression": "SELECT CUSNO FROM (SELECT CUSNO FROM BIL.SUB WHERE STAT='A' UNION SELECT CUSNO FROM ERP.SCLDGR GROUP BY CUSNO HAVING SUM(TXNAMT) > 0) q JOIN ERP.CUSMST c ON c.CUSNO = q.CUSNO WHERE c.CUSTYP <> 'I'"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM ERP.CUSMST c\nWHERE c.CUSTYP <> 'I'\n  AND c.CUSNO IN (\n      SELECT CUSNO FROM BIL.SUB WHERE STAT = 'A'\n      UNION\n      SELECT CUSNO FROM ERP.SCLDGR GROUP BY CUSNO HAVING SUM(TXNAMT) > 0\n  )"
+  }
+ },
+ {
+  "term_id": "T2",
+  "use_history": false,
+  "created_at": "2026-10-07 06:57:49.124 -0700",
+  "measure_value": 1413.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "ERP.CUSMST"
+    },
+    {
+     "role": "filter",
+     "expression": "ERP.CUSMST.CUSTYP = 'R'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- not used: ERP.CUSMST.STSCD"
+    },
+    {
+     "role": "source",
+     "expression": "BIL.SUB"
+    },
+    {
+     "role": "filter",
+     "expression": "BIL.SUB.STAT = 'A'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- not used: BIL.SUB.END_DT"
+    },
+    {
+     "role": "source",
+     "expression": "ERP.SCLDGR"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = ERP.SCLDGR.CUSNO"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = BIL.SUB.CUSNO"
+    },
+    {
+     "role": "filter",
+     "expression": "SUM(ERP.SCLDGR.TXNAMT) > 0"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- not used: LOY.PTS_TXN, LOY.MBR"
+    },
+    {
+     "role": "time_window",
+     "expression": "CURRENT_DATE"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM ERP.CUSMST c\nWHERE c.CUSTYP = 'R'\n  AND (\n    EXISTS (\n      SELECT 1 FROM BIL.SUB s\n      WHERE s.CUSNO = c.CUSNO\n        AND s.STAT = 'A'\n    )\n    OR\n    EXISTS (\n      SELECT 1\n      FROM (\n        SELECT g.CUSNO, SUM(g.TXNAMT) AS bal\n        FROM ERP.SCLDGR g\n        WHERE g.CUSNO = c.CUSNO\n        GROUP BY g.CUSNO\n      ) bal_tbl\n      WHERE bal_tbl.bal > 0\n    )\n  )"
+  }
+ },
+ {
+  "term_id": "T1",
+  "use_history": true,
+  "created_at": "2026-10-07 06:58:38.119 -0700",
+  "measure_value": 2899.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "OMS.ORD_HDR.CUST_REF, OMS.ORD_HDR.ORD_TS, OMS.ORD_HDR.CHNL_CD"
+    },
+    {
+     "role": "source",
+     "expression": "POS.TXN_HDR.CUST_NO, POS.TXN_HDR.TXN_DT, POS.TXN_HDR.TXN_TYP"
+    },
+    {
+     "role": "join",
+     "expression": "TRY_TO_NUMBER(SUBSTR(OMS.ORD_HDR.CUST_REF, 2)) = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "join",
+     "expression": "POS.TXN_HDR.CUST_NO = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "filter",
+     "expression": "OMS.ORD_HDR.CUST_REF <> 'GUEST'"
+    },
+    {
+     "role": "filter",
+     "expression": "OMS.ORD_HDR.ORD_STAT <> 'CNL'"
+    },
+    {
+     "role": "filter",
+     "expression": "POS.TXN_HDR.TXN_TYP = 'S'"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.CUSTYP <> 'I'"
+    },
+    {
+     "role": "time_window",
+     "expression": "OMS.ORD_HDR.ORD_TS >= DATEADD(day, -90, CURRENT_DATE()) OR POS.TXN_HDR.TXN_DT >= DATEADD(day, -90, CURRENT_DATE())"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM ERP.CUSMST c\nWHERE c.CUSTYP <> 'I'\n  AND (\n    EXISTS (\n      SELECT 1 FROM OMS.ORD_HDR h\n      WHERE h.CUST_REF <> 'GUEST'\n        AND TRY_TO_NUMBER(SUBSTR(h.CUST_REF, 2)) = c.CUSNO\n        AND h.ORD_STAT <> 'CNL'\n        AND h.ORD_TS >= DATEADD(day, -90, CURRENT_DATE())\n    )\n    OR EXISTS (\n      SELECT 1 FROM POS.TXN_HDR t\n      WHERE t.CUST_NO = c.CUSNO\n        AND t.TXN_TYP = 'S'\n        AND t.TXN_DT >= DATEADD(day, -90, CURRENT_DATE())\n    )\n  )"
+  }
+ },
+ {
+  "term_id": "T1",
+  "use_history": false,
+  "created_at": "2026-10-09 04:47:17.395 -0700",
+  "measure_value": 2802.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "OMS.ORD_HDR.ORD_ID, OMS.ORD_HDR.CUST_REF, OMS.ORD_HDR.CHNL_CD, OMS.ORD_HDR.ORD_TS"
+    },
+    {
+     "role": "source",
+     "expression": "POS.TXN_HDR.TXN_ID, POS.TXN_HDR.CUST_NO, POS.TXN_HDR.STR_NO, POS.TXN_HDR.TXN_DT, POS.TXN_HDR.TXN_TYP"
+    },
+    {
+     "role": "join",
+     "expression": "POS.TXN_HDR.CUST_NO = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "join",
+     "expression": "OMS.ORD_HDR.CUST_REF = 'C' || LPAD(ERP.CUSMST.CUSNO::VARCHAR, 8, '0')"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.CUSTYP = 'R' AND OMS.ORD_HDR.CUST_REF <> 'GUEST'"
+    },
+    {
+     "role": "time_window",
+     "expression": "OMS.ORD_HDR.ORD_TS >= DATEADD(day, -90, CURRENT_DATE) OR POS.TXN_HDR.TXN_DT >= DATEADD(day, -90, CURRENT_DATE)"
+    },
+    {
+     "role": "filter",
+     "expression": "POS.TXN_HDR.TXN_TYP = 'S'"
+    },
+    {
+     "role": "filter",
+     "expression": "-- not applied: owner said 'placed an order', not 'completed order', so ORD_STAT is not filtered"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM ERP.CUSMST c\nWHERE c.CUSTYP = 'R'\n  AND (\n    EXISTS (\n      SELECT 1 FROM OMS.ORD_HDR o\n      WHERE o.CUST_REF = 'C' || LPAD(c.CUSNO::VARCHAR, 8, '0')\n        AND o.CUST_REF <> 'GUEST'\n        AND o.ORD_TS >= DATEADD(day, -90, CURRENT_DATE)\n    )\n    OR EXISTS (\n      SELECT 1 FROM POS.TXN_HDR p\n      WHERE p.CUST_NO = c.CUSNO\n        AND p.TXN_TYP = 'S'\n        AND p.TXN_DT >= DATEADD(day, -90, CURRENT_DATE)\n    )\n  )"
+  }
+ },
+ {
+  "term_id": "T2",
+  "use_history": true,
+  "created_at": "2026-10-09 04:48:01.136 -0700",
+  "measure_value": 1413.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "ERP.CUSMST.CUSNO, ERP.CUSMST.CUSTYP"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.CUSTYP <> 'E' AND ERP.CUSMST.CUSTYP <> 'I'"
+    },
+    {
+     "role": "source",
+     "expression": "BIL.SUB.CUSNO, BIL.SUB.STAT, BIL.SUB.END_DT"
+    },
+    {
+     "role": "filter",
+     "expression": "BIL.SUB.STAT = 'A' AND (BIL.SUB.END_DT IS NULL OR BIL.SUB.END_DT >= CURRENT_DATE())"
+    },
+    {
+     "role": "source",
+     "expression": "ERP.SCLDGR.CUSNO, SUM(ERP.SCLDGR.TXNAMT)"
+    },
+    {
+     "role": "filter",
+     "expression": "SUM(ERP.SCLDGR.TXNAMT) > 0"
+    },
+    {
+     "role": "join",
+     "expression": "BIL.SUB.CUSNO = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.SCLDGR.CUSNO = ERP.CUSMST.CUSNO"
+    },
+    {
+     "role": "time_window",
+     "expression": "CURRENT_DATE()"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT c.CUSNO) AS active_customers\nFROM ERP.CUSMST c\nWHERE c.CUSTYP NOT IN ('E', 'I')\n  AND (\n    EXISTS (\n      SELECT 1 FROM BIL.SUB s\n      WHERE s.CUSNO = c.CUSNO\n        AND s.STAT = 'A'\n        AND (s.END_DT IS NULL OR s.END_DT >= CURRENT_DATE())\n    )\n    OR\n    EXISTS (\n      SELECT 1 FROM ERP.SCLDGR g\n      WHERE g.CUSNO = c.CUSNO\n      GROUP BY g.CUSNO\n      HAVING SUM(g.TXNAMT) > 0\n    )\n  )"
+  }
+ },
+ {
+  "term_id": "T2",
+  "use_history": false,
+  "created_at": "2026-10-09 04:50:05.346 -0700",
+  "measure_value": 1469.0,
+  "proposal": {
+   "entity": {
+    "table": "ERP.CUSMST",
+    "key_columns": [
+     "CUSNO"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "ERP.CUSMST"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.CUSTYP <> 'I'"
+    },
+    {
+     "role": "source",
+     "expression": "BIL.SUB"
+    },
+    {
+     "role": "filter",
+     "expression": "BIL.SUB.STAT = 'A'"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = BIL.SUB.CUSNO"
+    },
+    {
+     "role": "source",
+     "expression": "ERP.SCLDGR"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.CUSNO = ERP.SCLDGR.CUSNO"
+    },
+    {
+     "role": "filter",
+     "expression": "SUM(ERP.SCLDGR.TXNAMT) > 0"
+    },
+    {
+     "role": "exclusion",
+     "expression": "SELECT CUSNO FROM BIL.SUB WHERE STAT='A' UNION SELECT CUSNO FROM ERP.SCLDGR GROUP BY CUSNO HAVING SUM(TXNAMT) > 0"
+    },
+    {
+     "role": "exclusion",
+     "expression": "ERP.CUSMST.STSCD"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT CM.CUSNO) AS active_customer_count\nFROM ERP.CUSMST CM\nWHERE CM.CUSTYP <> 'I'\n  AND (\n    CM.CUSNO IN (SELECT CUSNO FROM BIL.SUB WHERE STAT = 'A')\n    OR CM.CUSNO IN (\n      SELECT CUSNO FROM ERP.SCLDGR GROUP BY CUSNO HAVING SUM(TXNAMT) > 0\n    )\n  )"
+  }
+ },
+ {
+  "term_id": "T3I",
+  "use_history": false,
+  "created_at": "2026-10-09 06:54:05.991 -0700",
+  "measure_value": 769.0,
+  "proposal": {
+   "entity": {
+    "table": "LOY.MBR",
+    "key_columns": [
+     "MBR_ID"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "LOY.MBR"
+    },
+    {
+     "role": "join",
+     "expression": "LOY.MBR.MBR_ID = LOY.PTS_TXN.MBR_ID"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.PTS_TXN.TXN_CD = 'RDM'"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.PTS_TXN.TXN_DT >= DATEADD(day, -60, CURRENT_DATE)"
+    },
+    {
+     "role": "join",
+     "expression": "LOY.MBR.MBR_ID = LOY.EML_EVT.MBR_ID"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.EML_EVT.EVT_TYP = 'OPN'"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.EML_EVT.EVT_TS >= DATEADD(day, -60, CURRENT_DATE)"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- LOY.MBR.CARD_STAT is NOT used as a qualifying condition"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT m.MBR_ID) AS engaged_members FROM LOY.MBR m WHERE EXISTS (SELECT 1 FROM LOY.PTS_TXN t WHERE t.MBR_ID = m.MBR_ID AND t.TXN_CD = 'RDM' AND t.TXN_DT >= DATEADD(day, -60, CURRENT_DATE)) OR EXISTS (SELECT 1 FROM LOY.EML_EVT e WHERE e.MBR_ID = m.MBR_ID AND e.EVT_TYP = 'OPN' AND e.EVT_TS >= DATEADD(day, -60, CURRENT_DATE))"
+  }
+ },
+ {
+  "term_id": "T3I",
+  "use_history": true,
+  "created_at": "2026-10-09 06:55:03.816 -0700",
+  "measure_value": 769.0,
+  "proposal": {
+   "entity": {
+    "table": "LOY.MBR",
+    "key_columns": [
+     "MBR_ID"
+    ]
+   },
+   "components": [
+    {
+     "role": "source",
+     "expression": "LOY.MBR"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.PTS_TXN"
+    },
+    {
+     "role": "source",
+     "expression": "LOY.EML_EVT"
+    },
+    {
+     "role": "join",
+     "expression": "LOY.PTS_TXN.MBR_ID = LOY.MBR.MBR_ID"
+    },
+    {
+     "role": "join",
+     "expression": "LOY.EML_EVT.MBR_ID = LOY.MBR.MBR_ID"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.PTS_TXN.TXN_CD = 'RDM'"
+    },
+    {
+     "role": "filter",
+     "expression": "LOY.EML_EVT.EVT_TYP = 'OPN'"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.PTS_TXN.TXN_DT >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "time_window",
+     "expression": "LOY.EML_EVT.EVT_TS >= DATEADD(day, -60, CURRENT_DATE())"
+    },
+    {
+     "role": "exclusion",
+     "expression": "-- LOY.MBR.CARD_STAT excluded from measure logic"
+    },
+    {
+     "role": "join",
+     "expression": "ERP.CUSMST.LOYNO = LOY.MBR.CARD_NO"
+    }
+   ],
+   "measure_sql": "SELECT COUNT(DISTINCT m.MBR_ID) AS engaged_members\nFROM LOY.MBR m\nWHERE EXISTS (\n    SELECT 1 FROM LOY.PTS_TXN pt\n    WHERE pt.MBR_ID = m.MBR_ID\n      AND pt.TXN_CD = 'RDM'\n      AND pt.TXN_DT >= DATEADD(day, -60, CURRENT_DATE())\n  )\n  OR EXISTS (\n    SELECT 1 FROM LOY.EML_EVT ee\n    WHERE ee.MBR_ID = m.MBR_ID\n      AND ee.EVT_TYP = 'OPN'\n      AND ee.EVT_TS >= DATEADD(day, -60, CURRENT_DATE())\n  )"
+  }
+ }
+]

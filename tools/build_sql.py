@@ -35,6 +35,12 @@ PROCEDURES = [
         "extra": ["interview.py"],
         "signature": "PROMOTE_TERM(DRAFT_ID STRING, TERM_ID STRING, APP_DB STRING DEFAULT 'SVC_APP')",
     },
+    {
+        # Layer 3 thin slice (ADR-016): no model call, generation is deterministic.
+        "module": "semantic_view.py",
+        "signature": "GENERATE_SEMANTIC_VIEW(TERM_ID STRING, USE_HISTORY BOOLEAN DEFAULT TRUE, "
+                     "RAW_DB STRING DEFAULT 'ALDERGLEN_RAW')",
+    },
 ]
 
 
@@ -80,6 +86,12 @@ DROP PROCEDURE IF EXISTS MAP_TERM(STRING, STRING, BOOLEAN, STRING);
 
 -- One row per interview draft promoted into GLOSSARY. The mapper never writes the drafts themselves.
 CREATE TABLE IF NOT EXISTS PROMOTIONS (DRAFT_ID STRING, TERM_ID STRING, PROMOTED_AT TIMESTAMP_LTZ);
+
+-- One row per generated semantic view: its answer next to the mapping's own measure, run at the same moment.
+CREATE TABLE IF NOT EXISTS SEMANTIC_VIEWS (
+  TERM_ID STRING, RUN_ID STRING, CREATED_AT TIMESTAMP_LTZ, SEMANTIC_VIEW STRING, EVENTS_VIEW STRING,
+  SV_VALUE FLOAT, MEASURE_VALUE FLOAT, MATCHED BOOLEAN, IGNORED VARIANT, DDL STRING
+);
 """)
     for p in PROCEDURES:
         out.append(f"""
