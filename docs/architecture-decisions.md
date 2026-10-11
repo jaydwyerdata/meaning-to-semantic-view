@@ -396,3 +396,30 @@ members: 90 did both, and the metric counts each once.
 confirmation by example rows, and asking Cortex Analyst the users' own questions against the
 semantic view.
 
+
+## ADR-017: Recorded demo run, and corrections from the pre-publication audit (11 October 2026)
+
+**What ran.** The full path once more for the demo recording, on the trial account: an interview for
+"engaged member" in the app (I played the loyalty programme manager, answering from the T3 glossary
+definition), `PROMOTE_TERM`, `MAP_TERM` with history, `GENERATE_SEMANTIC_VIEW`, then the independent check
+as the evaluator under the `SVC_EVAL` tag. The mapping measure, the semantic view and the reference
+query all returned 760. Broken down by source, 551 members opened an email (`LOY.EML_EVT`) and 299
+redeemed points (`LOY.PTS_TXN`): 850 in total against 760 distinct members, so 90 did both. This is the
+same logic as ADR-016 on a later Snowflake date; the 60-day window moves, which is why 760 differs from
+the 769 in ADR-015 and ADR-016. Nothing in those entries was wrong; they record other days.
+
+**What this does not show.** Still one interviewer who wrote the definition, one term, one model, one
+shape. The demo interview answers are examples, not evidence about real business users.
+
+**Audit corrections.**
+
+- The README's "How it works" described the engineer review, example-row confirmation and Cortex Analyst
+  validation in the present tense. None is built; the section now says so.
+- ADR-012 says Snowsight activates all of a user's roles as secondary roles by default. I did not check
+  that against Snowflake's documentation. The design does not depend on it: `require_mapper_role` reads
+  the session's actual secondary roles and refuses to run unless they are off.
+- The README said the Claude models are served cross-region only. The documentation says cross-region
+  inference is needed for the full set of models, not that rule exactly. What was observed is in ADR-008:
+  the trial account already had it enabled. The README now says that.
+- `docs/layer1-slice-plan.md` still read "nothing here exists yet"; its status line now points to ADR-015.
+- Added the MIT licence. Replaced a literal em dash in a test with an escape so the repo has none.

@@ -1,7 +1,9 @@
 # Layer 1 slice plan: the business interview (planned, not built)
 
-Status: plan only. Nothing here exists yet. When it is built, the decisions move into ADRs and the
-README describes what runs.
+Status: written before the build, kept as the plan. Layer 1 has since been built and run once in
+Snowflake (ADR-015); the README describes what runs. Tasks and acceptance tests below are the
+original plan, not a record of what passed. The closed-loop figure of 794 below was the value on the
+day of the original runs; it moves with the date (ADR-004).
 
 ## Goal
 

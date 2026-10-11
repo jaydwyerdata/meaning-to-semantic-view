@@ -112,7 +112,7 @@ class Generation(unittest.TestCase):
         self.assertIn("subject AS ALDERGLEN_RAW.LOY.MBR PRIMARY KEY (MBR_ID)", sql)
         self.assertIn("qualifying_events.ENGAGED_MEMBER_COUNT AS COUNT(DISTINCT qualifying_events.ENTITY_KEY)", sql)
         self.assertIn("WITH SYNONYMS = ('active loyalty member')", sql)
-        self.assertNotIn("—", sql)
+        self.assertNotIn("\u2014", sql)
 
     def test_quotes_in_business_text_are_escaped(self):
         term = dict(TERM, definition="Members who've redeemed", owner="Loyalty's team")

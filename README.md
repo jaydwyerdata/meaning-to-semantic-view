@@ -38,12 +38,14 @@ Three layers, each with a different audience:
 
 1. **Capture meaning** (business users). A guided conversation collects concepts, measures, time
    logic, exclusions, synonyms and the questions people actually ask. No schema is ever shown.
-2. **Map meaning to structure** (engineers). Cortex proposes candidate tables, columns, joins and
-   filters for each concept from catalog metadata, sample values and query history. An engineer
-   confirms or corrects each proposal.
-3. **Generate and validate** (both). Business users confirm mappings by judging example rows in
-   plain language. The tool emits `CREATE SEMANTIC VIEW` DDL, then asks Cortex Analyst the users'
-   own questions against it.
+   Built; see Status.
+2. **Map meaning to structure** (engineers). Cortex proposes the tables, columns, joins and
+   filters for each concept from catalog metadata, sample values and query history, with its
+   evidence. Built; the engineer review step is not.
+3. **Generate and validate** (both). The tool emits `CREATE SEMANTIC VIEW` DDL and checks the
+   result against the mapping's own number. Built for one shape of definition. Planned, not built:
+   business users confirming mappings by judging example rows in plain language, and asking
+   Cortex Analyst the users' own questions against the semantic view.
 
 ## Status
 
@@ -97,6 +99,11 @@ Early build. What exists today:
   the mapping and, checked independently, the reference query. One term, one shape. See
   [ADR-016](docs/architecture-decisions.md#adr-016-semantic-view-generation-is-deterministic-for-one-supported-shape-10-october-2026).
 
+- **Recorded demo run (11 October 2026 addendum, ADR-017)**: the interview, promotion, mapping and
+  generation steps run once end to end for "engaged member" and recorded on video. The mapping,
+  the semantic view and the independent reference query all returned 760; 551 members opened an
+  email, 299 redeemed points and 90 did both. The video is not yet linked here.
+
 Not yet built: engineer review of mappings and generated DDL, business confirmation by example rows,
 and asking Cortex Analyst the users' own questions against the semantic view.
 
@@ -107,9 +114,10 @@ and asking Cortex Analyst the users' own questions against the semantic view.
 No account or organisation identifiers are hard-coded; object names are session variables at the
 top of each script.
 
-The mapping step needs Cortex. The Claude models it defaults to are served cross-region only, so an
-ACCOUNTADMIN must set `CORTEX_ENABLED_CROSS_REGION` (for example to `'ANY_REGION'`) if the account
-has not already.
+The mapping step needs Cortex. In the trial account used here, none of the listed Claude models had
+in-region availability and cross-region inference was already enabled (ADR-008). If yours is not,
+an ACCOUNTADMIN sets the account parameter `CORTEX_ENABLED_CROSS_REGION` (for example to
+`'ANY_REGION'`; see the Snowflake documentation on cross-region inference).
 
 ```
 sql/01_setup_and_ddl.sql      creates warehouse, database, schemas, tables
