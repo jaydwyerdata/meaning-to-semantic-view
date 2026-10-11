@@ -3,6 +3,8 @@
 Turns what business people know about their data into a Snowflake semantic view, without asking
 them to know anything about tables or columns.
 
+[Watch the demo (4:55)](https://youtu.be/pExtk1yjLrg)
+
 ## The problem
 
 Cortex Analyst and Snowflake Intelligence answer business questions well when a good semantic view
@@ -102,7 +104,7 @@ Early build. What exists today:
 - **Recorded demo run (11 October 2026 addendum, ADR-017)**: the interview, promotion, mapping and
   generation steps run once end to end for "engaged member" and recorded on video. The mapping,
   the semantic view and the independent reference query all returned 760; 551 members opened an
-  email, 299 redeemed points and 90 did both. The video is not yet linked here.
+  email, 299 redeemed points and 90 did both. The video is linked at the top.
 
 Not yet built: engineer review of mappings and generated DDL, business confirmation by example rows,
 and asking Cortex Analyst the users' own questions against the semantic view.
