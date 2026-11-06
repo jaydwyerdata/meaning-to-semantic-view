@@ -6,14 +6,28 @@ venv/
 
 # Secrets and local connection config
 .env
+.env.*
+!.env.example
 *.pem
 *.p8
+*.key
 connections.toml
 config.toml
+secrets.toml
+credentials.json
+.streamlit/secrets.toml
+
+# Local-only Claude context
+CLAUDE.local.md
+.claude/settings.local.json
 
 # Demo-prep working artifacts (speaking scripts, slide outlines, diagrams): never committed
 demo/
 demo-assets/
+
+# Archives and snapshots
+*.zip
+*.tar.gz
 
 # OS and editor
 .DS_Store
